@@ -24,3 +24,6 @@ alias glog="git log --graph --pretty=format:'%Cred%h%Creset %an: %s - %Creset %C
 alias gaa='git add . '
 alias gcm='git commit -m '
 alias gb='git branch'
+
+# Projects
+alias efapps="cd ~/Projects/eventfarm/ef-apps"
