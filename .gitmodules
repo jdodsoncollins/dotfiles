@@ -1,1 +1,5 @@
 
+[submodule "prezto.symlink"]
+	path = prezto.symlink
+	url = https://github.com/jasonraimondi/prezto.git
+	branch = jasons-dotfiles
