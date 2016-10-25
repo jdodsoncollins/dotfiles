@@ -1,0 +1,50 @@
+Host serv
+    HostName 10.0.0.10
+    Port 22
+    User jason
+
+Host vm
+    HostName 127.0.0.1
+    Port 2222
+    User vagrant
+    IdentityFile ~/.ssh/TheMacBookPro
+
+Host theweb
+    HostName 192.241.250.76
+    Port 954
+    User root
+
+Host rp
+    HostName 162.243.224.214
+    Port 954
+    User root
+    
+Host thespot
+    HostName 162.243.74.164
+    Port 22
+    User root
+
+Host home
+    HostName jasonraimondi.asuscomm.com
+    Port 954
+    User jason
+    IdentityFile ~/.ssh/TheMacBookPro
+
+Host homeall
+    HostName jasonraimondi.asuscomm.com
+    Port 954
+    User jason
+    IdentityFile ~/.ssh/TheMacBookPro
+    LocalForward 5050 127.0.0.1:5050
+    LocalForward 8080 127.0.0.1:8080
+    LocalForward 32400 127.0.0.1:32400
+
+Host acfilters
+    HostName 192.185.238.180
+    Port 2222
+    User atcair
+
+Host parents
+    HostName 76.108.130.97
+    Port 1157
+    User jason

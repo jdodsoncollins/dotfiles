@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+#   Clips a video file and removes audio
+#
+#   $1 - the path to the movie we're converting.
+#   $2 - destination of the clipped result
+#   $3 - the start time of the finished product.
+#        This can be in seconds, or it also accepts the "hh:mm:ss[.xxx]" format.
+#   $4 - the duration of the video sequence.
+#        This can be in seconds, or it also accepts the "hh:mm:ss[.xxx]" format.
+#
+#
+#   movieme <path> <destination> <start-time> <duration>
+
+ffmpeg -i $1 -ss $3 -c copy -an -t $4 $2
+

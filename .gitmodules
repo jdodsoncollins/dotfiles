@@ -1,0 +1,4 @@
+[submodule "zprezto.symlink"]
+	path = zprezto.symlink
+    url=https://github.com/jasonraimondi/prezto.git
+

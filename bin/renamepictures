@@ -1,0 +1,1 @@
+find . -type f \( -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif’ -o -iname ‘*.tif' \) -exec jhead -n%Y-%m-%d\ %H-%M-%S {} \;
