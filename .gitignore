@@ -1,0 +1,27 @@
+# Deny everything, then re-allow specific paths.
+# A new package is invisible to git until it is listed below, so `git add -A`
+# cannot sweep up a token or a key file that landed in the repo by accident.
+*
+
+!.gitignore
+!README.md
+!Brewfile
+!install.sh
+
+!ghostty/
+!ghostty/**
+!tmux/
+!tmux/**
+
+# Re-deny credential shapes even inside an allowed package. Later patterns win,
+# so these override the allows above.
+*.pem
+*.key
+*.p12
+*_rsa
+*_ed25519
+.env
+.env.*
+**/credentials
+**/hosts.yml
+**/.netrc
