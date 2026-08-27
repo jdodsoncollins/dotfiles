@@ -17,8 +17,9 @@ echo "stowed: ${PACKAGES[*]}"
 # Application Support copy wins on conflict. A leftover file there overrides the
 # symlink this script just made.
 GHOSTTY_APP_SUPPORT="$HOME/Library/Application Support/com.mitchellh.ghostty"
-if compgen -G "$GHOSTTY_APP_SUPPORT/config*" >/dev/null 2>&1; then
+if [ -d "$GHOSTTY_APP_SUPPORT" ] && [ -n "$(ls -A "$GHOSTTY_APP_SUPPORT" 2>/dev/null)" ]; then
   echo
-  echo "warning: $GHOSTTY_APP_SUPPORT still holds a config file."
-  echo "It takes precedence over ~/.config/ghostty/config. Remove it to use this repo."
+  echo "warning: $GHOSTTY_APP_SUPPORT is not empty:"
+  ls -1 "$GHOSTTY_APP_SUPPORT" | sed 's/^/  /'
+  echo "Anything Ghostty reads there wins over ~/.config/ghostty/config. Move it aside."
 fi
