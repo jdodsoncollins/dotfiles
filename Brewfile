@@ -49,8 +49,6 @@ brew "pkgconf"
 brew "rustup"
 # SDL2 compatibility layer that uses SDL3 behind the scenes
 brew "sdl2-compat"
-# Scans and monitors projects for security vulnerabilities
-brew "snyk-cli"
 # Super fast C++ logging library
 brew "spdlog"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
