@@ -39,6 +39,11 @@ macos-option-as-alt = true
 shell-integration = detect
 shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo
 
+# Start herdr on the first surface only. New tabs, splits, and the quick
+# terminal stay plain shells, so closing herdr leaves a working terminal.
+# Login shell is what puts ~/.local/bin on PATH for the lookup.
+initial-command = /bin/zsh -lc herdr
+
 # Dropdown terminal; needs Privacy → Accessibility permission
 quick-terminal-position = top
 keybind = global:cmd+grave_accent=toggle_quick_terminal
