@@ -7,11 +7,15 @@ Terminal configuration for macOS, managed with GNU stow.
 ```sh
 git clone git@github.com:jdodsoncollins/dotfiles.git ~/Projects/dotfiles
 cd ~/Projects/dotfiles
-brew bundle
+HOMEBREW_CASK_OPTS="--adopt" brew bundle --no-upgrade
 ./install.sh
 ```
 
-`install.sh` symlinks every package into `$HOME`. Re-run it after adding one.
+`brew bundle` installs formulae, casks, Mac App Store apps, and VS Code
+extensions. `--adopt` takes ownership of apps already sitting in
+`/Applications` instead of downloading a second copy. `install.sh` symlinks
+every package into `$HOME`, backing up any real file that would conflict to
+`~/.dotfiles-backup/<timestamp>/`. Re-run it after adding a package.
 
 ## Layout
 
@@ -20,6 +24,10 @@ One directory per tool. Inside it, files sit at the path they occupy relative to
 ```
 ghostty/.config/ghostty/config  ->  ~/.config/ghostty/config
 tmux/.tmux.conf                 ->  ~/.tmux.conf
+zsh/.zshrc                      ->  ~/.zshrc
+git/.gitconfig                  ->  ~/.gitconfig
+vscode/Library/Application Support/Code/User/settings.json
+                                ->  ~/Library/Application Support/Code/User/settings.json
 ```
 
 Adding a tool takes three edits: create the directory, add its name to `PACKAGES` in
@@ -29,11 +37,24 @@ Adding a tool takes three edits: create the directory, add its name to `PACKAGES
 
 Ghostty loads both `~/.config/ghostty/config` and
 `~/Library/Application Support/com.mitchellh.ghostty/config`. The Application Support copy
-wins where the two disagree. If you kept your config there before, delete it after stowing
-or it will keep overriding this repo.
+wins where the two disagree, including an empty file. `install.sh` moves a leftover
+Application Support `config` aside so the stowed copy is what Ghostty actually reads.
+
+## Homebrew vs standalone
+
+Prefer a Homebrew cask or formula over a website download. This Brewfile lists
+casks for apps that were previously standalone on this Mac (`1password`,
+`docker-desktop`, `cursor`, `zed`, `herdr`, `xcodes`, and others). After
+`brew bundle`, remove the leftover binary in `~/.local/bin` if Homebrew now
+ships the same tool.
+
+`docker-desktop`, `google-chrome`, and `purevpn` need a real terminal with
+sudo to finish adopting. Do not run `brew install --cask --adopt docker-desktop`
+from a non-interactive session: if sudo fails, Homebrew rolls back by deleting
+`/Applications/Docker.app`.
 
 ## Secrets
 
 `.gitignore` denies everything and re-allows named paths, so `git add -A` cannot commit a
 credential from an unlisted file. Nothing here should hold a token: `~/.config/gh/hosts.yml`,
-`~/.aws`, `~/.ssh`, and `~/.claude.json` stay out of the repo.
+`~/.aws`, `~/.ssh`, `~/.claude.json`, and VS Code `mcp.json` stay out of the repo.

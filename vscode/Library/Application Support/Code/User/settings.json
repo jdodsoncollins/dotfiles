@@ -1,0 +1,60 @@
+{
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "editor.accessibilitySupport": "off",
+  "editor.inlineSuggest.enabled": true,
+  "files.defaultLanguage": "javascript",
+  "files.exclude": {
+    "*/**/.cache": true
+  },
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "javascript.validate.enable": false,
+  "local-history.path": "~.localhistory",
+  "nxConsole.showNodeVersionOnStartup": false,
+  "search.exclude": {
+    "**/.cache": true,
+    "**/.idea": true,
+    "**/.lh": true,
+    "**/node_modules": false,
+    "**/node_modules/**": true,
+    "*/**/.cache/**": true,
+    "*/**/lcov-report/**": true,
+    "*/**/log/**": true,
+    "*/**/node_modules": true
+  },
+  "security.workspace.trust.untrustedFiles": "open",
+  "svelte.enable-ts-plugin": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "vscode-edge-devtools.fallbackRevision": "@5d3e4966b112fb8c2d3aa0aab64ba560cadfc2f2",
+  "vscode-edge-devtools.mirrorEdits": true,
+  "workbench.editor.enablePreview": false,
+  "files.autoSave": "afterDelay",
+  "files.autoSaveWhenNoErrors": true,
+  "files.autoSaveDelay": 5000,
+  "files.autoSaveWorkspaceFilesOnly": true,
+  "workbench.colorTheme": "One Dark Pro Darker",
+  "augment.advanced": {},
+  "augment.nextEdit.showDiffInHover": true,
+  "augment.nextEdit.enableAutoApply": false,
+  "github.copilot.enable": {
+    "*": false
+  },
+  "settingsSync.ignoredExtensions": [
+    "augment.vscode-augment"
+  ],
+  "extensions.ignoreRecommendations": true,
+  "githubPullRequests.pullBranch": "never",
+  "githubPullRequests.pushBranch": "always",
+  "claudeCode.preferredLocation": "panel",
+  "typescript.experimental.useTsgo": true,
+  "claudeCode.useTerminal": true
+}

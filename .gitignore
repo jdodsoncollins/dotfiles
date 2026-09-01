@@ -12,6 +12,12 @@
 !ghostty/**
 !tmux/
 !tmux/**
+!zsh/
+!zsh/**
+!git/
+!git/**
+!vscode/
+!vscode/**
 
 # Re-deny credential shapes even inside an allowed package. Later patterns win,
 # so these override the allows above.
@@ -25,3 +31,4 @@
 **/credentials
 **/hosts.yml
 **/.netrc
+**/mcp.json
