@@ -1,6 +1,6 @@
 # dotfiles
 
-Terminal configuration for macOS, managed with GNU stow.
+Terminal configuration for macOS, managed with GNU stow. Agent instructions: [`AGENTS.md`](AGENTS.md).
 
 ## Install
 
