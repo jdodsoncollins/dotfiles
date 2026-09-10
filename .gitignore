@@ -1,35 +1,37 @@
 # Deny everything, then re-allow specific paths.
-# A new package is invisible to git until it is listed below, so `git add -A`
+# A new file is invisible to git until it is listed below, so `git add -A`
 # cannot sweep up a token or a key file that landed in the repo by accident.
 *
 
 !.gitignore
 !README.md
 !AGENTS.md
-!Brewfile
-!install.sh
 
-!ghostty/
-!ghostty/**
-!tmux/
-!tmux/**
-!zsh/
-!zsh/**
-!git/
-!git/**
-!vscode/
-!vscode/**
+!macos/
+!macos/**
+!linux/
+!linux/**
 
 # Re-deny credential shapes even inside an allowed package. Later patterns win,
 # so these override the allows above.
 *.pem
 *.key
 *.p12
+*.pfx
 *_rsa
 *_ed25519
+*.kdbx
 .env
 .env.*
 **/credentials
+**/credentials.json
 **/hosts.yml
 **/.netrc
 **/mcp.json
+**/session.json
+**/Preferences.xml
+**/RustDesk.toml
+**/RustDesk2.toml
+**/password
+**/.storage/
+**/com.plexapp.plugins.library.db*

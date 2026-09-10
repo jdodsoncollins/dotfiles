@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "jeremy.menu",
+  "name": "My Omarchy menu",
+  "version": "1.0.0",
+  "author": "Omarchy",
+  "description": "Quickshell-powered Omarchy command menu",
+  "kinds": [
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "menu": "Menu.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "App menu",
+    "description": "Opens the Super+Space menu (apps, AI, setup)",
+    "category": "Compositor",
+    "allowMultiple": false
+  },
+  "omarchy": {}
+}

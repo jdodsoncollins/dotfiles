@@ -1,0 +1,82 @@
+#!/bin/bash
+# Start wayvnc on localhost, Tailscale, and LAN. Auth lives in ~/.config/wayvnc/config.
+set -euo pipefail
+
+WAYVNC_ROOT="${WAYVNC_ROOT:-$HOME/.local/opt/wayvnc/usr}"
+if [[ -x "$WAYVNC_ROOT/bin/wayvnc" ]]; then
+  export PATH="$WAYVNC_ROOT/bin:$PATH"
+  export LD_LIBRARY_PATH="$WAYVNC_ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${UID:-1000}}"
+
+socket="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+for _ in $(seq 1 30); do
+  [[ -S "$socket" ]] && break
+  sleep 1
+done
+if [[ ! -S "$socket" ]]; then
+  echo "wayvnc: Wayland socket $socket not found" >&2
+  exit 1
+fi
+
+addrs=()
+
+add_addr() {
+  local addr="$1"
+  [[ -n "$addr" ]] || return 0
+  addrs+=("$addr")
+}
+
+add_ipv4() {
+  local iface="$1"
+  local ip=""
+  ip=$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1) || true
+  [[ -n "$ip" ]] && add_addr "${ip}:5900"
+  return 0
+}
+
+add_ipv6() {
+  local iface="$1"
+  local ip=""
+  ip=$(ip -6 -o addr show dev "$iface" scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1) || true
+  [[ -n "$ip" ]] && add_addr "[${ip}]:5900"
+  return 0
+}
+
+add_addr 127.0.0.1:5900
+add_addr '[::1]:5900'
+add_ipv4 wlp0s20f3
+add_ipv4 enp2s0
+add_ipv6 wlp0s20f3
+
+for _ in $(seq 1 20); do
+  if ip -4 -o addr show dev tailscale0 2>/dev/null | grep -q ' inet '; then
+    add_ipv4 tailscale0
+    add_ipv6 tailscale0
+    break
+  fi
+  sleep 1
+done || true
+
+[[ ${#addrs[@]} -gt 0 ]] || addrs=(127.0.0.1:5900)
+
+# Prefer the focused output; fall back to whatever wayvnc picks.
+output=$(hyprctl monitors -j 2>/dev/null | python3 -c 'import json,sys
+try:
+    m=json.load(sys.stdin)
+    for x in m:
+        if x.get("focused"):
+            print(x["name"]); break
+    else:
+        print(m[0]["name"] if m else "")
+except Exception:
+    pass' 2>/dev/null || true)
+
+cmd=(wayvnc --config "$HOME/.config/wayvnc/config" --gpu --render-cursor --name omarchy --max-fps 30 --log-level info)
+[[ -n "$output" ]] && cmd+=(--output "$output")
+cmd+=("${addrs[@]}")
+
+echo "wayvnc listening on: ${addrs[*]} output=${output:-auto}" >&2
+exec "${cmd[@]}"

@@ -1,0 +1,8 @@
+#!/bin/bash
+# Blank the panel after 10 minutes idle. Do not suspend.
+# Hyprland 0.56+ needs Lua dispatch; omarchy-brightness-display wraps that.
+# No swayidle -w: logind idle inhibitors (e.g. a coding agent "turn in
+# progress") would otherwise keep the panel lit for hours.
+exec /usr/bin/swayidle \
+  timeout 600 'omarchy brightness display off' \
+  resume 'omarchy brightness display on'

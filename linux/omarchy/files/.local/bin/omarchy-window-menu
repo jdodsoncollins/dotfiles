@@ -1,0 +1,78 @@
+#!/bin/bash
+# Clickable window chrome menu (Omarchy GUI). Used by the titlebar ☰ button
+# and Ctrl+right-click so phone/remote users don't need keyboard shortcuts.
+set -euo pipefail
+
+win=$(hyprctl activewindow -j 2>/dev/null || true)
+if [[ -z ${win:-} || $win == "null" ]]; then
+  exit 0
+fi
+
+addr=$(jq -r '.address // empty' <<<"$win")
+[[ -n $addr ]] || exit 0
+
+title=$(jq -r '.title // "Window"' <<<"$win")
+floating=$(jq -r '.floating' <<<"$win")
+pinned=$(jq -r '.pinned' <<<"$win")
+fullscreen=$(jq -r '.fullscreen // 0' <<<"$win")
+window="address:$addr"
+
+hypr_dispatch() {
+  local lua="$1"
+  shift
+  hyprctl dispatch "$lua" >/dev/null 2>&1 || hyprctl dispatch "$@" >/dev/null
+}
+
+if [[ $pinned == true ]]; then
+  pop_label="Pop in (unpin + tile)"
+else
+  pop_label="Pop out (float + pin)"
+fi
+
+if [[ $floating == true ]]; then
+  float_label="Tile (pop in layout)"
+else
+  float_label="Float"
+fi
+
+if [[ $pinned == true ]]; then
+  pin_label="Unpin"
+else
+  pin_label="Pin (always visible)"
+fi
+
+if [[ ${fullscreen:-0} != 0 && ${fullscreen:-0} != "0" ]]; then
+  max_label="Restore size"
+else
+  max_label="Maximize"
+fi
+
+choice=$(omarchy menu select "$title" \
+  $'\tClose' \
+  $'󰖯\t'"$pop_label" \
+  $'󰊓\t'"$float_label" \
+  $'󰊔\t'"$max_label" \
+  $'󰝘\tFullscreen' \
+  $'󰐃\t'"$pin_label" \
+  -- --width 440) || exit 0
+
+case "$choice" in
+Close)
+  hypr_dispatch "hl.dsp.window.close({ window = \"$window\" })" closewindow "$window"
+  ;;
+"$pop_label")
+  omarchy-hyprland-window-pop
+  ;;
+"$float_label")
+  hypr_dispatch "hl.dsp.window.float({ window = \"$window\", action = \"toggle\" })" togglefloating "$window"
+  ;;
+"$max_label")
+  hypr_dispatch "hl.dsp.window.fullscreen({ window = \"$window\", mode = \"maximized\", action = \"toggle\" })" fullscreen 1 "$window"
+  ;;
+Fullscreen)
+  hypr_dispatch "hl.dsp.window.fullscreen({ window = \"$window\", action = \"toggle\" })" fullscreen 0 "$window"
+  ;;
+"$pin_label")
+  hypr_dispatch "hl.dsp.window.pin({ window = \"$window\" })" pin "$window"
+  ;;
+esac

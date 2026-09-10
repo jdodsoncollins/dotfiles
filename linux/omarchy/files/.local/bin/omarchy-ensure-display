@@ -1,0 +1,18 @@
+#!/bin/bash
+# If Hyprland has no enabled monitor (true headless / unplugged display),
+# create a virtual output so RustDesk and the desktop have something to capture.
+set -euo pipefail
+
+sleep 2
+
+if ! command -v hyprctl >/dev/null || ! command -v jq >/dev/null; then
+  exit 0
+fi
+
+enabled=$(hyprctl monitors -j 2>/dev/null | jq '[.[] | select(.disabled|not)] | length' || echo 0)
+if [[ ${enabled:-0} -gt 0 ]]; then
+  exit 0
+fi
+
+hyprctl output create headless HEADLESS-1 >/dev/null 2>&1 || hyprctl output create headless >/dev/null
+hyprctl keyword monitor "HEADLESS-1,1920x1080@60,0x0,1" >/dev/null 2>&1 || true

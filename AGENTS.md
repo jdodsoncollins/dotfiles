@@ -1,40 +1,70 @@
 # Agent notes
 
-macOS dotfiles for this machine. Clone lives at `~/Projects/dotfiles`. Human install steps are in `README.md`.
+Dotfiles for two machines. Clone lives at `~/projects/dotfiles` on Linux and
+`~/Projects/dotfiles` on macOS.
 
-## Layout
+- [`macos/`](macos/) — terminal config for macOS, GNU stow. Details: [`macos/AGENTS.md`](macos/AGENTS.md), [`macos/README.md`](macos/README.md).
+- [`linux/omarchy/`](linux/omarchy/) — Omarchy (Arch + Hyprland) user config. Details: [`linux/omarchy/AGENTS.md`](linux/omarchy/AGENTS.md), [`linux/omarchy/README.md`](linux/omarchy/README.md).
 
-GNU stow. One directory per tool; files inside it sit at the path they occupy relative to `$HOME`. Current packages: `ghostty`, `tmux`, `zsh`, `git`, `vscode`.
+Human install steps are in the README next to each tree. Root `README.md` is the map.
 
-Adding a package takes three edits:
+## Secrets — never commit
 
-1. Create the directory with the `$HOME`-relative tree
-2. Append the name to `PACKAGES` in `install.sh`
-3. Allowlist it in `.gitignore` (`!pkg/` and `!pkg/**`)
+Nothing in this repository may hold a secret. If a file would not be safe on a
+public GitHub repo, it does not belong here. Write examples with `CHANGE_ME`,
+never live values.
 
-Then run `./install.sh`. Do not use `stow --adopt`; the script backs up real files to `~/.dotfiles-backup/<timestamp>/` and skips already-stowed inodes (a directory symlink like `~/.config/ghostty` makes the inner file look like a regular file).
+Do not add, stage, or commit:
 
-## Gitignore
+**Credentials and tokens**
+- GitHub tokens (`gho_`, `ghp_`, `github_pat_`), `GH_TOKEN`, `gh auth` keyring dumps, `~/.config/gh/hosts.yml`
+- API keys for OpenAI, Anthropic, xAI, Google, Vercel, Tailscale, or any other cloud
+- 1Password session/account tokens, `op` config, recovered vault items
+- Home Assistant long-lived access tokens, `.storage/`, `secrets.yaml`
+- Plex `PlexOnlineToken`, `Preferences.xml`, library databases
+- Wi-Fi PSKs, Tailscale auth keys, VPN profiles
 
-The root `.gitignore` denies `*` and re-allows named paths. A new file is invisible to `git add -A` until it is listed. After the allowlist, credential shapes are re-denied (`*.pem`, `**/hosts.yml`, `**/.netrc`, `**/mcp.json`, …).
+**Keys and passwords**
+- SSH private keys (`id_*` without `.pub`), `authorized_keys` copies of private material, `known_hosts` is optional but skip it
+- GPG private keys, `*.kdbx`, `*.p12`, `*.pfx`
+- wayvnc `password` file, live `config` with a real password, `rsa_key.pem`, `tls_key.pem`, `tls_cert.pem`
+- RustDesk `RustDesk.toml` / `RustDesk2.toml` (passwords, unlock pin, ID material)
+- `.env`, `.env.*`, `.netrc`, `credentials`, `credentials.json`
 
-## Secrets
+**Agent / editor auth**
+- `~/.claude.json`, Cursor/VS Code `mcp.json` (tokens live there)
+- Herdr `session.json` and logs
+- Browser cookies, Chromium `Login Data`, libsecret / gnome-keyring dumps
 
-Nothing here holds a token. Stay out of the repo: `~/.ssh`, `~/.aws`, `~/.config/gh/hosts.yml`, `~/.claude.json`, VS Code `mcp.json`, herdr `session.json` / logs.
+**Machine dumps that often hide secrets**
+- `/etc/shadow`, sudoers with passwords, docker config.json auths
+- Plex Media Server data under `/var/lib/plex`
+- Home Assistant config under `~/.config/homeassistant`
+- Timestamped `.bak` copies of any of the above (RustDesk backups, Preferences.xml)
 
-## Homebrew
+Public SSH keys (`.pub`) and host key *fingerprints* in documentation are fine.
+A `config.example` with `password=CHANGE_ME` is fine. A real password is not.
 
-Prefer a brew formula or cask over a website download. After installing a brew copy, remove the shadowed binary from `~/.local/bin` (leftovers from this machine are in `~/.local/bin/standalone-backup/`).
+The root `.gitignore` denies `*` and only re-allows named paths, then
+re-denies credential filename shapes. A new path is invisible to `git add -A`
+until it is allowlisted. Do not weaken that.
 
-- List intentional leaves, casks, and `mas` apps. Do not dump brew dependencies (`qt`, `guile`, `zlib`, …).
-- Tailscale is the Mac App Store app, not `tailscale-app`.
-- Google Gemini is `google-gemini`, not `gemini` (MacPaw).
-- Formula `grok` is an unrelated deprecated regex tool, not xAI Grok.
-- `asdf` is installed but unused; nvm is the Node manager.
-- Do not restore the old Datadog taps / `pup` Brewfile. That dump was a different machine.
+## Also never commit
 
-`docker-desktop`, `google-chrome`, and `purevpn` need a real terminal with sudo to adopt. Never `brew install --cask --adopt docker-desktop` from a non-interactive session: if sudo fails, Homebrew deletes `/Applications/Docker.app` on rollback.
+These are not always “secrets” but they still do not belong in this repo:
 
-## Ghostty
+- Third-party Omarchy plugin checkouts under `~/.config/omarchy/plugins/` (except the user-authored `jeremy.menu`). Install them with `omarchy plugin add` from [`linux/omarchy/plugins.txt`](linux/omarchy/plugins.txt).
+- Nested `.git` directories from cloned plugins or themes
+- Hyprland / shell `*.bak.*` backups
+- Media files from `/mnt/media1` or `/mnt/media2`
+- `node_modules/`, build artifacts, editor swap files
+- Private repo contents copied out of other clones
+- `/etc/fstab` as a live copy (UUIDs and mount options can be *described* in the Omarchy README)
 
-macOS reads `~/.config/ghostty/config` and `~/Library/Application Support/com.mitchellh.ghostty/config`. The Application Support copy wins, including an empty file. `install.sh` moves a leftover non-symlink aside. Ghostty starts `herdr` on the first surface only (`initial-command`); do not also `brew services start herdr`.
+## Layout rules
+
+macOS packages stay under `macos/`. Omarchy files stay under `linux/omarchy/`.
+Do not flatten the repo back into a single macOS-only tree.
+
+When adding a file: put it in the correct OS directory, allowlist it in
+`.gitignore` if needed, and keep secrets out.

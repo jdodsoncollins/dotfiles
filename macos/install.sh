@@ -5,6 +5,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES=(ghostty tmux zsh git vscode)
 BACKUP_DIR="${DOTFILES_BACKUP:-$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)}"
 
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "macos/install.sh is for macOS. On Omarchy use linux/omarchy/install.sh" >&2
+  exit 1
+fi
+
 if ! command -v brew >/dev/null 2>&1; then
   echo "Homebrew is required. Install it from https://brew.sh then re-run." >&2
   exit 1

@@ -1,0 +1,10 @@
+# Third-party Omarchy plugins. install.sh runs: omarchy plugin add <url> --enable --yes
+# Do not vendor these trees in git.
+https://github.com/rosakodu/omarchy-dock.git
+https://github.com/konradk/hass.git
+https://github.com/jankeesvw/omarchy-herdr.git
+https://github.com/jankeesvw/omarchy-notification-center.git
+https://github.com/modib/omarchy-activity-monitor.git
+https://github.com/fross100/omaplug.git
+# Theme (also vendored under files/.config/omarchy/themes/bauhaus for offline apply)
+# https://github.com/mwaltzer/omarchy-bauhaus-theme.git
