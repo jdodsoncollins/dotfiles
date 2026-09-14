@@ -9,6 +9,13 @@ hl.config({
     hover_icon_on_border = true,
     border_size = 3,
   },
+  -- Keep the pointer where you clicked (dock / keybind focus). Default
+  -- Hyprland warps the cursor into the newly focused window.
+  cursor = {
+    no_warps = true,
+    hide_on_key_press = true,
+    warp_on_change_workspace = 0,
+  },
 })
 
 -- https://wiki.hypr.land/Configuring/Basics/Variables/#general

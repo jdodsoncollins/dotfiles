@@ -17,11 +17,18 @@ Follow the root deny list. In particular never add:
 - SSH private keys created for other devices (`~/.ssh/id_ed25519_mac`, etc.)
 - Full git checkouts of third-party plugins (`rosakodu.dock`, `hass`, …)
 - `shell.json.bak.*`, `*.lua.bak.*`
+- Live `autostart.lua` / systemd units if they hardcode `/home/jeremy`. Keep the portable `$HOME` / `%h` copies in this tree.
 
 `files/.config/wayvnc/config.example` must keep `password=CHANGE_ME`.
 
 Third-party plugins are listed in `plugins.txt` and installed at apply time.
-The only plugin source in git is `jeremy.menu` (user-authored bar widget).
+The only plugin whose full source is in git is `jeremy.menu` (user-authored
+bar widget). Overlay patches for `rosakodu.dock` (`DockItem.qml`,
+`DockPanel.qml`, `components/FolderMenu.qml`) are stored so `install.sh` can
+re-apply them after `omarchy plugin add`. Do not vendor the rest of that repo.
+
+Keep helper paths portable: `os.getenv("HOME")` in Lua, `%h` in systemd units.
+Do not snapshot live files that hardcode `/home/jeremy`.
 
 ## Apply
 

@@ -53,7 +53,7 @@ until it is allowlisted. Do not weaken that.
 
 These are not always “secrets” but they still do not belong in this repo:
 
-- Third-party Omarchy plugin checkouts under `~/.config/omarchy/plugins/` (except the user-authored `jeremy.menu`). Install them with `omarchy plugin add` from [`linux/omarchy/plugins.txt`](linux/omarchy/plugins.txt).
+- Third-party Omarchy plugin checkouts under `~/.config/omarchy/plugins/` (except the user-authored `jeremy.menu`, and overlay patches for files we actually edited in `rosakodu.dock`). Install plugins with `omarchy plugin add` from [`linux/omarchy/plugins.txt`](linux/omarchy/plugins.txt).
 - Nested `.git` directories from cloned plugins or themes
 - Hyprland / shell `*.bak.*` backups
 - Media files from `/mnt/media1` or `/mnt/media2`

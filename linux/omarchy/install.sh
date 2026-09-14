@@ -40,7 +40,11 @@ copy_tree "$FILES/.config/omarchy/themes/bauhaus/" "$HOME/.config/omarchy/themes
 echo "Copying helper scripts"
 mkdir -p "$HOME/.local/bin"
 cp -a "$FILES/.local/bin/." "$HOME/.local/bin/"
-chmod +x "$HOME/.local/bin/"omarchy-*
+chmod +x "$HOME/.local/bin/"omarchy-* "$HOME/.local/bin/grok-view-screen"
+
+echo "Copying desktop entries"
+mkdir -p "$HOME/.local/share/applications"
+cp -a "$FILES/.local/share/applications/." "$HOME/.local/share/applications/"
 
 echo "Installing user systemd units"
 mkdir -p "$HOME/.config/systemd/user"
@@ -64,6 +68,18 @@ done < "$ROOT/plugins.txt"
 
 omarchy plugin enable jeremy.menu --section left --index 0 2>/dev/null || true
 omarchy plugin enable omarchy.menu 2>/dev/null || true
+
+echo "Overlaying rosakodu.dock patches (right-click Open / Minimize / Close)"
+DOCK="$HOME/.config/omarchy/plugins/rosakodu.dock"
+PATCH="$FILES/.config/omarchy/plugins/rosakodu.dock"
+if [[ -d "$DOCK" ]]; then
+  mkdir -p "$DOCK/components"
+  cp -a "$PATCH/DockItem.qml" "$DOCK/DockItem.qml"
+  cp -a "$PATCH/DockPanel.qml" "$DOCK/DockPanel.qml"
+  cp -a "$PATCH/components/FolderMenu.qml" "$DOCK/components/FolderMenu.qml"
+else
+  echo "rosakodu.dock missing after plugin add; skip overlay" >&2
+fi
 
 if [[ -d "$HOME/.config/omarchy/themes/bauhaus" ]]; then
   omarchy theme set bauhaus 2>/dev/null || echo "Set theme manually: omarchy theme set bauhaus"

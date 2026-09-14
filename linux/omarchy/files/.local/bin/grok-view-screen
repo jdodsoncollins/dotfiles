@@ -1,0 +1,19 @@
+#!/bin/bash
+# Full-screen capture for the agent. Prints the path.
+set -euo pipefail
+dir="${GROK_SCREEN_DIR:-$HOME/.cache/grok}"
+mkdir -p "$dir"
+out="$dir/screen.png"
+saved=$(omarchy capture screenshot fullscreen save 2>/dev/null | tail -n1 || true)
+if [[ -n ${saved:-} && -f $saved ]]; then
+  cp -f "$saved" "$out"
+  echo "$out"
+  exit 0
+fi
+if command -v grim >/dev/null; then
+  grim "$out"
+  echo "$out"
+  exit 0
+fi
+echo "grok-view-screen: no screenshot tool" >&2
+exit 1

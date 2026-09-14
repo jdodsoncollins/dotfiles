@@ -16,10 +16,11 @@ cd ~/projects/dotfiles/linux/omarchy
 
 `install.sh` will:
 
-1. Copy Hyprland overlays, `shell.json`, dock pins, `jeremy.menu`, Bauhaus theme, hooks, and helper scripts
+1. Copy Hyprland overlays, `shell.json`, dock pins, `jeremy.menu`, Bauhaus theme, hooks, helper scripts, and desktop entries
 2. Install third-party plugins from [`plugins.txt`](plugins.txt)
-3. Enable user systemd units (wayvnc, herdr-server, display-dpms)
-4. Set the Bauhaus theme
+3. Overlay the `rosakodu.dock` right-click patches (after the plugin clone)
+4. Enable user systemd units (wayvnc, herdr-server, display-dpms)
+5. Set the Bauhaus theme
 
 It does **not** copy secrets. Create `~/.config/wayvnc/config` from
 `files/.config/wayvnc/config.example` and put the password only on the machine.
@@ -32,9 +33,11 @@ Then: `hyprctl reload` and reopen or restart the shell if the bar looks stale
 ```
 files/.config/hypr/           Hyprland user overlays
 files/.config/omarchy/        shell.json, dock pins, jeremy.menu, bauhaus, hooks
+files/.config/omarchy/plugins/rosakodu.dock/  overlay patches only (not the full plugin)
 files/.config/systemd/user/   wayvnc, herdr-server, display-dpms
 files/.config/wayvnc/         config.example only (no live password)
 files/.local/bin/             helper scripts
+files/.local/share/applications/  omarchy-menu + herdr desktop entries
 plugins.txt                   third-party plugin git URLs
 install.sh                    apply this tree onto $HOME
 ```
@@ -46,7 +49,7 @@ install.sh                    apply this tree onto $HOME
 | `hyprland.lua` | Loads Omarchy defaults plus personal files; parks RustDesk on the scratchpad; prepends `~/.local/bin` to PATH |
 | `autostart.lua` | Headless display helper, starts wayvnc + Herdr TUI; does not open the RustDesk GUI |
 | `bindings.lua` | Alt+drag move/resize; Ctrl+right-click window menu |
-| `looknfeel.lua` | Mouse resize on tiled borders (28px grab) |
+| `looknfeel.lua` | Mouse resize on tiled borders (28px grab); `cursor.no_warps` so dock/keybind focus does not yank the pointer |
 | `input.lua` | Personal input overrides (mostly stock comments) |
 | `window-chrome.lua` | Optional hyprbars titlebar (close / ☰) if the plugin is loaded — do not run `hyprpm` unless asked |
 
@@ -58,10 +61,12 @@ install.sh                    apply this tree onto $HOME
 - Center: indicators, clock, keyboard, weather, stock `omarchy.menu`, updates
 - Right: agents, tray, Home Assistant, Herdr, dock settings, omaplug, activity monitor, Tailscale, BT, network, audio, monitors, power, notification center
 - Idle lock/screensaver set very high (stay awake; display blanks via `display-dpms` instead)
-- Dock pins: Omarchy menu, Chromium, foot, Nautilus, nvim, Herdr, 1Password
+- Dock pins: Omarchy menu, Chromium, Nautilus, Herdr, 1Password (foot and Neovim are not pinned)
+- Dock right-click: Open / New window, Minimize / Restore, Close (overlay on `rosakodu.dock`)
 
 `jeremy.menu` is a bar-widget-only clone so the stock Apps menu keeps working.
-It is the only plugin whose source is stored here.
+It is the only plugin whose *full* source is stored here. `rosakodu.dock` is
+cloned from `plugins.txt`; only the three patched QML files live in this tree.
 
 ### Theme
 
@@ -78,6 +83,7 @@ change; `omazed` keeps Zed in sync.
 | `omarchy-display-dpms` | Blank the panel after 10 minutes idle; do not suspend |
 | `omarchy-ensure-display` | Create a headless Hyprland output if every monitor is gone (RustDesk) |
 | `omarchy-show-done` | Click-to-dismiss “Done!” in the floating update terminal |
+| `grok-view-screen` | Full-screen capture to `~/.cache/grok/screen.png` (`omarchy capture` or `grim`) |
 
 ### systemd user units
 

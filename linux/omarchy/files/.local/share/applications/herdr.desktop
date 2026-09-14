@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Herdr
+Comment=Terminal workspace manager for AI coding agents
+Exec=omarchy-launch-terminal-herdr
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;Utility;
+StartupNotify=true
