@@ -30,6 +30,7 @@ Do not add, stage, or commit:
 - wayvnc `password` file, live `config` with a real password, `rsa_key.pem`, `tls_key.pem`, `tls_cert.pem`
 - RustDesk `RustDesk.toml` / `RustDesk2.toml` (passwords, unlock pin, ID material)
 - `.env`, `.env.*`, `.netrc`, `credentials`, `credentials.json`
+- Discord bot tokens (`bot.env`), OpenClaw `~/.openclaw/` state
 
 **Agent / editor auth**
 - `~/.claude.json`, Cursor/VS Code `mcp.json` (tokens live there)

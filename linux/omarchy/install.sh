@@ -53,6 +53,21 @@ systemctl --user daemon-reload
 systemctl --user enable --now herdr-server.service 2>/dev/null || systemctl --user enable herdr-server.service
 systemctl --user enable display-dpms.service
 systemctl --user enable wayvnc.service
+systemctl --user enable grok-discord.service 2>/dev/null || true
+
+echo "Installing Grok Discord gateway (no token)"
+mkdir -p "$HOME/.config/grok-discord"
+cp -a "$FILES/.config/grok-discord/gateway.py" "$HOME/.config/grok-discord/gateway.py"
+cp -a "$FILES/.config/grok-discord/requirements.txt" "$HOME/.config/grok-discord/requirements.txt"
+cp -a "$FILES/.config/grok-discord/rules.md" "$HOME/.config/grok-discord/rules.md"
+if [[ ! -f "$HOME/.config/grok-discord/bot.env" ]]; then
+  cp "$FILES/.config/grok-discord/bot.env.example" "$HOME/.config/grok-discord/bot.env.example"
+  echo "grok-discord: copy bot.env.example to bot.env and put the bot token only on this machine."
+fi
+if [[ ! -x "$HOME/.config/grok-discord/venv/bin/python" ]]; then
+  python3 -m venv "$HOME/.config/grok-discord/venv"
+  "$HOME/.config/grok-discord/venv/bin/pip" install -r "$HOME/.config/grok-discord/requirements.txt"
+fi
 
 if [[ ! -f "$HOME/.config/wayvnc/config" ]]; then
   mkdir -p "$HOME/.config/wayvnc"

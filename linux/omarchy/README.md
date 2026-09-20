@@ -19,8 +19,9 @@ cd ~/projects/dotfiles/linux/omarchy
 1. Copy Hyprland overlays, `shell.json`, dock pins, `jeremy.menu`, Bauhaus theme, hooks, helper scripts, and desktop entries
 2. Install third-party plugins from [`plugins.txt`](plugins.txt)
 3. Overlay the `rosakodu.dock` right-click patches (after the plugin clone)
-4. Enable user systemd units (wayvnc, herdr-server, display-dpms)
-5. Set the Bauhaus theme
+4. Enable user systemd units (wayvnc, herdr-server, display-dpms, grok-discord)
+5. Install the Grok Discord gateway code and venv (token stays local)
+6. Set the Bauhaus theme
 
 It does **not** copy secrets. Create `~/.config/wayvnc/config` from
 `files/.config/wayvnc/config.example` and put the password only on the machine.
@@ -34,7 +35,8 @@ Then: `hyprctl reload` and reopen or restart the shell if the bar looks stale
 files/.config/hypr/           Hyprland user overlays
 files/.config/omarchy/        shell.json, dock pins, jeremy.menu, bauhaus, hooks
 files/.config/omarchy/plugins/rosakodu.dock/  overlay patches only (not the full plugin)
-files/.config/systemd/user/   wayvnc, herdr-server, display-dpms
+files/.config/systemd/user/   wayvnc, herdr-server, display-dpms, grok-discord
+files/.config/grok-discord/   gateway.py, rules, requirements, bot.env.example (no token)
 files/.config/wayvnc/         config.example only (no live password)
 files/.local/bin/             helper scripts
 files/.local/share/applications/  omarchy-menu + herdr desktop entries
@@ -90,6 +92,13 @@ change; `omazed` keeps Zed in sync.
 - `wayvnc.service` — Screens / Tailscale VNC (`:5900`)
 - `herdr-server.service` — Herdr backend
 - `display-dpms.service` — idle blanking
+- `grok-discord.service` — Grok Discord bot (DMs + `#grok` + its threads). Enable linger (`loginctl enable-linger`) so it starts at boot. Token is `~/.config/grok-discord/bot.env` only.
+
+### Grok Discord (`~/.config/grok-discord/`)
+
+Custom gateway, not Hermes. Listens as the Grok Discord application in DMs from the allowlisted user and in `#grok` (new work items open a thread). Streams replies instead of holding a typing indicator until the CLI exits.
+
+Do not commit `bot.env`, `sessions.json`, `gateway.log`, or `venv/`.
 
 ### Plugins (installed from git, not vendored)
 
@@ -113,6 +122,15 @@ Documented so a rebuild is possible; none of this is copied by `install.sh`.
   8-character file password in `~/.config/wayvnc/`
 - **Home Assistant:** Docker host-network `:8123`, config in
   `~/.config/homeassistant` — tokens stay in the plugin/keyring
+- **Grok Discord:** user service `grok-discord`; private `#grok` on guild
+  `1241636720894672977`. Token only in `~/.config/grok-discord/bot.env`.
+- **OpenClaw:** install with Omarchy **Install → AI → OpenClaw**
+  (`omarchy-install-ai-openclaw` / `omarchy pkg add openclaw`). Do **not**
+  `npm i -g openclaw` into mise. Keep `~/.openclaw` (config, Discord, xAI)
+  on the machine; never copy it into this repo. Gateway:
+  `openclaw-gateway.service` with linger. Discord bot `@OpenClawOmarchy`
+  listens in **#openclaw** and owner DMs only. Token in
+  `~/.openclaw/.env` / `~/.config/openclaw-discord/bot.env`.
 
 ## Secrets
 

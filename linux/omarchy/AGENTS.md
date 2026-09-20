@@ -18,6 +18,9 @@ Follow the root deny list. In particular never add:
 - Full git checkouts of third-party plugins (`rosakodu.dock`, `hass`, …)
 - `shell.json.bak.*`, `*.lua.bak.*`
 - Live `autostart.lua` / systemd units if they hardcode `/home/jeremy`. Keep the portable `$HOME` / `%h` copies in this tree.
+- `~/.config/grok-discord/bot.env`, `sessions.json`, `gateway.log`, `venv/`
+- `~/.openclaw/` (OpenClaw chats, Discord/xAI tokens, browser profile)
+- `~/.config/openclaw-discord/bot.env` and one-shot Playwright helpers
 
 `files/.config/wayvnc/config.example` must keep `password=CHANGE_ME`.
 

@@ -23,6 +23,9 @@
 *.kdbx
 .env
 .env.*
+**/bot.env
+**/sessions.json
+**/gateway.log
 **/credentials
 **/credentials.json
 **/hosts.yml

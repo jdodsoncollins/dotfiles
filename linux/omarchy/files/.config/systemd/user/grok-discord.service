@@ -1,0 +1,19 @@
+[Unit]
+Description=Grok Discord gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+Environment=HOME=%h
+Environment=GROK_HOME=%h/.grok
+Environment=PATH=%h/.local/bin:/usr/bin:/bin
+Environment=GROK_TIMEOUT=14400
+ExecStart=%h/.config/grok-discord/venv/bin/python %h/.config/grok-discord/gateway.py
+Restart=on-failure
+RestartSec=8
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target
