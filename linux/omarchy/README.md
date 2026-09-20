@@ -124,13 +124,17 @@ Documented so a rebuild is possible; none of this is copied by `install.sh`.
   `~/.config/homeassistant` — tokens stay in the plugin/keyring
 - **Grok Discord:** user service `grok-discord`; private `#grok` on guild
   `1241636720894672977`. Token only in `~/.config/grok-discord/bot.env`.
-- **OpenClaw:** install with Omarchy **Install → AI → OpenClaw**
-  (`omarchy-install-ai-openclaw` / `omarchy pkg add openclaw`). Do **not**
-  `npm i -g openclaw` into mise. Keep `~/.openclaw` (config, Discord, xAI)
-  on the machine; never copy it into this repo. Gateway:
-  `openclaw-gateway.service` with linger. Discord bot `@OpenClawOmarchy`
-  listens in **#openclaw** and owner DMs only. Token in
+- **OpenClaw:** Omarchy **Install → AI → OpenClaw** adds the distro package
+  (`omarchy pkg add openclaw`) and a Control UI web app. Keep `~/.openclaw`
+  on the machine; never copy it into this repo. Discord bot
+  `@OpenClawOmarchy` listens in **#openclaw** and owner DMs only. Tokens in
   `~/.openclaw/.env` / `~/.config/openclaw-discord/bot.env`.
+  As of 2026-09-20 the Omarchy package is **2026.9.2** (state schema 15) while
+  a live `~/.openclaw` from npm **2026.9.5** is schema 17. Do not point
+  `openclaw-gateway.service` at `/usr/bin/openclaw` until the package is
+  ≥ 2026.9.5. Run the gateway from mise Node (`openclaw@latest`) and put
+  `~/.local/bin/openclaw` on PATH so the app launcher does not hit the older
+  binary. Gateway unit + linger for boot.
 
 ## Secrets
 
