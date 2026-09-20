@@ -31,6 +31,7 @@ Do not add, stage, or commit:
 - RustDesk `RustDesk.toml` / `RustDesk2.toml` (passwords, unlock pin, ID material)
 - `.env`, `.env.*`, `.netrc`, `credentials`, `credentials.json`
 - Discord bot tokens (`bot.env`), OpenClaw `~/.openclaw/` state
+- `~/.xurl` (X OAuth tokens and client secrets), OpenClaw/mobile setup codes
 
 **Agent / editor auth**
 - `~/.claude.json`, Cursor/VS Code `mcp.json` (tokens live there)

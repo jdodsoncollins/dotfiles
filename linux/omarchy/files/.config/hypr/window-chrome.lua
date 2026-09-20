@@ -47,7 +47,11 @@ local theme = load_theme_colors()
 local menu_cmd = (os.getenv("HOME") or "") .. "/.local/bin/omarchy-window-menu"
 
 -- Plugin keys are only valid after hyprbars is loaded by hyprpm.
-if hl.plugin ~= nil and hl.plugin.hyprbars ~= nil then
+-- Cold start parses this file before plugins load, so pull hyprbars in and
+-- re-read config once. After that, hl.plugin.hyprbars is present.
+if hl.plugin == nil or hl.plugin.hyprbars == nil then
+  o.exec_on_start("hyprpm reload -n && hyprctl reload")
+else
   hl.config({
     plugin = {
       hyprbars = {

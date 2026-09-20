@@ -1,10 +1,12 @@
 # Omarchy Linux dotfiles
 
-User config for the Omarchy desktop on this Dell AIO (Hyprland 0.56, Omarchy 4).
+User config for the Omarchy desktop on this Dell AIO (Hyprland 0.56.2, Omarchy 4.0.4).
 These are **overrides** in `~/.config/` and `~/.local/bin/`. Packaged Omarchy
 under `/usr/share/omarchy/` is never edited.
 
 Agent rules: [`AGENTS.md`](AGENTS.md) and the repo-root [`AGENTS.md`](../../AGENTS.md).
+Session-proved gotchas (Hyprland Lua, 1Password, xurl, OpenClaw + Tailscale Serve):
+[`NOTES.md`](NOTES.md).
 
 ## Apply on a new Omarchy install
 
@@ -53,7 +55,7 @@ install.sh                    apply this tree onto $HOME
 | `bindings.lua` | Alt+drag move/resize; Ctrl+right-click window menu |
 | `looknfeel.lua` | Mouse resize on tiled borders (28px grab); `cursor.no_warps` so dock/keybind focus does not yank the pointer |
 | `input.lua` | Personal input overrides (mostly stock comments) |
-| `window-chrome.lua` | Optional hyprbars titlebar (close / ☰) if the plugin is loaded — do not run `hyprpm` unless asked |
+| `window-chrome.lua` | hyprbars titlebar (close / ☰). Loads the plugin on Hyprland start if needed |
 
 ### Bar and dock (`shell.json`, `dock-pinned.json`)
 
@@ -129,12 +131,12 @@ Documented so a rebuild is possible; none of this is copied by `install.sh`.
   on the machine; never copy it into this repo. Discord bot
   `@OpenClawOmarchy` listens in **#openclaw** and owner DMs only. Tokens in
   `~/.openclaw/.env` / `~/.config/openclaw-discord/bot.env`.
-  As of 2026-09-20 the Omarchy package is **2026.9.2** (state schema 15) while
-  a live `~/.openclaw` from npm **2026.9.5** is schema 17. Do not point
+  As of 2026-09-20 the distro package is **2026.9.4-1**; mise Node
+  `~/.local/bin/openclaw` is **2026.9.5**. Do not point
   `openclaw-gateway.service` at `/usr/bin/openclaw` until the package is
-  ≥ 2026.9.5. Run the gateway from mise Node (`openclaw@latest`) and put
-  `~/.local/bin/openclaw` on PATH so the app launcher does not hit the older
-  binary. Gateway unit + linger for boot.
+  ≥ 2026.9.5. Keep `~/.local/bin/openclaw` on PATH. Gateway unit + linger
+  for boot. Mobile app: Tailscale Serve (see [`NOTES.md`](NOTES.md)); setup
+  codes live in 1Password, not this repo.
 
 ## Secrets
 

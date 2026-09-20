@@ -21,6 +21,8 @@ Follow the root deny list. In particular never add:
 - `~/.config/grok-discord/bot.env`, `sessions.json`, `gateway.log`, `venv/`
 - `~/.openclaw/` (OpenClaw chats, Discord/xAI tokens, browser profile)
 - `~/.config/openclaw-discord/bot.env` and one-shot Playwright helpers
+- `~/.xurl` / xurl client secrets, OAuth tokens, setup codes
+- 1Password `op` session material and live vault item dumps
 
 `files/.config/wayvnc/config.example` must keep `password=CHANGE_ME`.
 
