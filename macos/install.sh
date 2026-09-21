@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGES=(ghostty tmux zsh git vscode)
+PACKAGES=(ghostty herdr tmux zsh git vscode)
 BACKUP_DIR="${DOTFILES_BACKUP:-$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then

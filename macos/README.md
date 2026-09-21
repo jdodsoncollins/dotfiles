@@ -27,6 +27,7 @@ One directory per tool. Inside it, files sit at the path they occupy relative to
 
 ```
 ghostty/.config/ghostty/config  ->  ~/.config/ghostty/config
+herdr/.config/herdr/config.toml ->  ~/.config/herdr/config.toml
 tmux/.tmux.conf                 ->  ~/.tmux.conf
 zsh/.zshrc                      ->  ~/.zshrc
 git/.gitconfig                  ->  ~/.gitconfig
@@ -36,6 +37,12 @@ vscode/Library/Application Support/Code/User/settings.json
 
 Adding a tool takes three edits: create the directory, add its name to `PACKAGES` in
 `install.sh`, and allowlist it in the repo-root `.gitignore` under `macos/`.
+
+## HerdR
+
+The HerdR package configures its local UI theme and sidebar layout. It omits the
+`machine` token from agent rows because the saved `rk2mn2` SSH profile points back
+to this Mac. Remove that saved profile if the duplicate machine group is not needed.
 
 ## Ghostty config path on macOS
 
