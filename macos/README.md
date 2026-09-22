@@ -40,9 +40,48 @@ Adding a tool takes three edits: create the directory, add its name to `PACKAGES
 
 ## HerdR
 
-The HerdR package configures its local UI theme and sidebar layout. It omits the
-`machine` token from agent rows because the saved `rk2mn2` SSH profile points back
-to this Mac. Remove that saved profile if the duplicate machine group is not needed.
+The HerdR package holds `config.toml` (tokyo-night theme, agent sidebar rows,
+keybinds) and the `last-reply` plugin at `.config/herdr/last-reply/`, stowed to
+`~/.config/herdr/last-reply`. Agent rows omit the `machine` token because the
+saved `rk2mn2` SSH profile points back to this Mac. Remove that saved profile
+if the duplicate machine group is not needed.
+
+### opencode + HerdR: one tab = one session
+
+- Each opencode pane reports its root session to HerdR
+  (`herdr integration install opencode`). Tabs reopen with
+  `opencode --session <id>` after a Herdr server restart.
+- `prefix+shift+o` opens a new tab running a fresh opencode session
+  (`last-reply` plugin's `new-opencode-tab` action).
+- On every agent status change, the `last-reply` plugin renames the pane's tab
+  to the opencode session topic and stamps the `$last_reply` time shown beside
+  the topic row. Manual tab renames are overwritten on the next status change;
+  a fresh tab stays labeled `OpenCode` until its first prompt sets a topic.
+- Quota gauges, model, context, and per-vendor icons come from the third-party
+  `herdr-agent-usage` plugin, which is not vendored here:
+
+  ```sh
+  git clone https://github.com/levi-qiao/herdr-agent-usage.git ~/Projects/herdr-agent-usage
+  cd ~/Projects/herdr-agent-usage && ./install.sh --agent opencode,claude,codex,cursor
+  ```
+
+- `prefix+shift+r` refreshes quotas, `prefix+shift+q` opens quota settings
+  (both bound by `herdr-agent-usage`).
+
+Fresh machine setup after `./install.sh` stows this package:
+
+```sh
+herdr integration install opencode claude codex cursor
+herdr plugin link ~/.config/herdr/last-reply
+```
+
+Caveats: `herdr-agent-usage` regenerates `ui.sidebar.agents.rows` atomically
+and replaces the stowed `config.toml` symlink with a real file. After
+upgrading or reconfiguring it, re-add the `$last_reply` token to the topic
+row, copy `~/.config/herdr/config.toml` over this package's copy, and re-run
+`./install.sh` to re-stow. The icon font codepoint map lives in
+`~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`
+(managed by `herdr-agent-usage`); reload Ghostty after its configure runs.
 
 ## Ghostty config path on macOS
 
