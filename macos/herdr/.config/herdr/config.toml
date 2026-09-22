@@ -16,6 +16,7 @@ sidebar_min_width = 26
 sidebar_max_width = 42
 mobile_width_threshold = 100
 mouse_scroll_lines = 5
+right_click_passthrough_modifier = "ctrl"
 agent_panel_sort = "spaces" # herdr-agent-usage
 
 [ui.sidebar.agents]

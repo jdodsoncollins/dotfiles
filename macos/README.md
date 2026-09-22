@@ -83,6 +83,25 @@ row, copy `~/.config/herdr/config.toml` over this package's copy, and re-run
 `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`
 (managed by `herdr-agent-usage`); reload Ghostty after its configure runs.
 
+### Mouse model
+
+Herdr is mouse-native: click panes, tabs, and sidebar agents to focus, drag
+split borders, drag pane scrollbars. opencode's TUI captures the mouse by
+default (`tui.json` `"mouse": true`, unset here), so:
+
+- opencode's own dialogs (`ctrl+p` palette, `/models`) are clickable inside
+  panes, and wheel over a pane scrolls opencode, not Herdr.
+- Bare right-click opens Herdr's menu. `right_click_passthrough_modifier =
+  "ctrl"` in `config.toml` sends Ctrl+right-click to the pane app instead
+  (opencode's context menu).
+- Drag-select does nothing inside opencode panes (the gesture belongs to
+  opencode, which has no text selection). Use `prefix+[` copy mode or
+  Shift+drag for Ghostty-native selection. Setting opencode `"mouse": false`
+  hands selection and scrollback to Herdr, at the cost of opencode dialog
+  clicking.
+- Cmd/Ctrl+click on transcript URLs stays broken by opencode's own capture
+  (anomalyco/opencode#35286); unrelated to Herdr.
+
 ## Ghostty config path on macOS
 
 Ghostty loads both `~/.config/ghostty/config` and
