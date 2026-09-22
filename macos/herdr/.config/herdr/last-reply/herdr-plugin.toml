@@ -9,6 +9,14 @@ platforms = ["macos", "linux"]
 on = "pane.agent_status_changed"
 command = ["node", "index.js"]
 
+[[events]]
+on = "pane.focused"
+command = ["node", "index.js"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["node", "index.js"]
+
 [[actions]]
 id = "new-opencode-tab"
 title = "New tab running opencode"
