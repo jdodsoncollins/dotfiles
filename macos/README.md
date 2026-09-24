@@ -79,6 +79,12 @@ if the duplicate machine group is not needed.
   cd ~/Projects/herdr-agent-usage && ./install.sh --agent opencode,claude,codex,cursor
   ```
 
+- `herdr-sidebar` (third-party, installed with
+  `herdr plugin install alexarthurs/herdr-sidebar/plugins/herdr-sidebar`) docks
+  a VS Code-style Explorer / Search / Source Control pane next to the active
+  pane. Toggle with `herdr plugin action invoke herdr-sidebar.open-sidebar`;
+  inside it, `1`/`2`/`3` switch views, `s` opens settings, `b` hides it.
+
 - `prefix+shift+r` refreshes quotas, `prefix+shift+q` opens quota settings
   (both bound by `herdr-agent-usage`).
 - Sidebar gauge percentages print **used** (matching opencode's own
