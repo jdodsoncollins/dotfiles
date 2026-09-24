@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUSTDESK_BASE="$HOME/Library/Application Support/RustDesk Server"
+RUSTDESK_LOGS="$RUSTDESK_BASE/logs"
+RUSTDESK_DATA="$RUSTDESK_BASE/data"
+LAUNCH_DOMAIN="gui/$(id -u)"
+SERVICES=(com.rustdesk.hbbs com.rustdesk.hbbr com.rustdesk.endpoint)
+
+usage() {
+  printf '%s\n' \
+    'usage: rustdesk-selfhost <status|public-key|logs|restart>' \
+    '' \
+    'status                 Show service state, listeners, and relay policy.' \
+    'public-key             Print the public key used by RustDesk clients.' \
+    'logs <hbbs|hbbr|endpoint>  Follow the selected service log.' \
+    'restart                Restart the server and persistent endpoint.'
+}
+
+status() {
+  local service state
+
+  for service in "${SERVICES[@]}"; do
+    if launchctl print "$LAUNCH_DOMAIN/$service" >/dev/null 2>&1; then
+      state="$(launchctl print "$LAUNCH_DOMAIN/$service" | awk '/state = / { print $3; exit }')"
+      printf '%s: %s\n' "$service" "$state"
+    else
+      printf '%s: not loaded\n' "$service"
+    fi
+  done
+
+  printf '\nlisteners:\n'
+  lsof -nP -iTCP:21115-21119 -sTCP:LISTEN || true
+  lsof -nP -iUDP:21116 || true
+
+  printf '\nrelay policy: '
+  if grep -q 'ALWAYS_USE_RELAY=Y' "$RUSTDESK_LOGS/hbbs.log"; then
+    printf 'forced through local hbbr\n'
+  else
+    printf 'direct connections may be used\n'
+  fi
+}
+
+public_key() {
+  test -s "$RUSTDESK_DATA/id_ed25519.pub"
+  tr -d '\n' < "$RUSTDESK_DATA/id_ed25519.pub"
+  printf '\n'
+}
+
+logs() {
+  case "${1:-}" in
+    hbbs | hbbr)
+      tail -n 100 -f "$RUSTDESK_LOGS/$1.log"
+      ;;
+    endpoint)
+      tail -n 100 -f "$HOME/Library/Logs/RustDesk/endpoint.log"
+      ;;
+    *)
+      usage >&2
+      exit 64
+      ;;
+  esac
+}
+
+restart() {
+  local service
+  for service in "${SERVICES[@]}"; do
+    launchctl kickstart -k "$LAUNCH_DOMAIN/$service"
+  done
+}
+
+case "${1:-}" in
+  status)
+    status
+    ;;
+  public-key)
+    public_key
+    ;;
+  logs)
+    shift
+    logs "${1:-}"
+    ;;
+  restart)
+    restart
+    ;;
+  *)
+    usage >&2
+    exit 64
+    ;;
+esac

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOTS=(
+  "codex:$HOME/.codex/skills"
+  "shared:$HOME/.agents/skills"
+  "claude:$HOME/.claude/skills"
+)
+
+usage() {
+  printf '%s\n' \
+    'usage: agent-skills <list|check>' \
+    '' \
+    'list   List user-global Codex, shared, and Claude skills.' \
+    'check  Check whether each user-global skill root exists.'
+}
+
+list_skills() {
+  local entry runtime root skill_file
+
+  for entry in "${ROOTS[@]}"; do
+    runtime="${entry%%:*}"
+    root="${entry#*:}"
+    [ -d "$root" ] || continue
+
+    while IFS= read -r skill_file; do
+      printf '%-7s %s\n' "$runtime" "${skill_file#"$root"/}"
+    done < <(find "$root" -type f -name SKILL.md | sort)
+  done
+}
+
+check_roots() {
+  local entry runtime root
+
+  for entry in "${ROOTS[@]}"; do
+    runtime="${entry%%:*}"
+    root="${entry#*:}"
+    if [ -d "$root" ]; then
+      printf '%-7s present  %s\n' "$runtime" "$root"
+    else
+      printf '%-7s missing  %s\n' "$runtime" "$root"
+    fi
+  done
+}
+
+case "${1:-}" in
+  list)
+    list_skills
+    ;;
+  check)
+    check_roots
+    ;;
+  *)
+    usage >&2
+    exit 64
+    ;;
+esac
