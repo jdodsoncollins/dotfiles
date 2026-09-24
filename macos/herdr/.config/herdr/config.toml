@@ -46,3 +46,9 @@ key = "prefix+shift+o"
 type = "plugin_action"
 command = "last-reply.new-opencode-tab"
 description = "new tab running opencode"
+
+[[keys.command]]
+key = "prefix+shift+e"
+type = "plugin_action"
+command = "herdr-sidebar.open-sidebar"
+description = "toggle VS Code-style sidebar (explorer/search/git)"
