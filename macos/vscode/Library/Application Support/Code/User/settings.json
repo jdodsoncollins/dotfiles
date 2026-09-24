@@ -86,5 +86,8 @@
   "githubPullRequests.pushBranch": "always",
   "claudeCode.preferredLocation": "panel",
   "typescript.experimental.useTsgo": true,
-  "claudeCode.useTerminal": true
+  "claudeCode.useTerminal": true,
+  "terminal.integrated.env.osx": {
+    "FIG_NEW_SESSION": "1"
+  }
 }
