@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# jev — ask TypeSafe's Jev decision model (System One) via OpenRouter.
+#
+# usage:
+#   jev "STATE" "QUESTION"                        noul: prints a 0..1 confidence
+#   jev "STATE" "QUESTION" -c "key:description" [-c ...]   choice: prints the picked key
+#
+# The key comes from OPENROUTER_API_KEY, falling back to opencode's auth.json.
+
+key_for() {
+  if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+    printf '%s' "$OPENROUTER_API_KEY"
+  else
+    jq -r '.openrouter.key // empty' "$HOME/.local/share/opencode/auth.json" 2>/dev/null
+  fi
+}
+
+usage() {
+  sed -n '3,8p' "$0" | sed 's/^# //'
+}
+
+STATE="${1:-}"
+QUESTION="${2:-}"
+[ -n "$STATE" ] && [ -n "$QUESTION" ] || { usage >&2; exit 64; }
+shift 2
+
+CRITERIA="{}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c)
+      [ $# -ge 2 ] || { usage >&2; exit 64; }
+      CRITERIA=$(jq -cn --arg k "${2%%:*}" --arg d "${2#*:}" \
+        --argjson acc "$CRITERIA" '$acc + {($k): $d}')
+      shift 2
+      ;;
+    *)
+      usage >&2
+      exit 64
+      ;;
+  esac
+done
+
+if [ "$CRITERIA" = "{}" ]; then
+  QUESTION_JSON=$(jq -cn --arg q "$QUESTION" '{type: "noul", instructions: $q}')
+else
+  QUESTION_JSON=$(jq -cn --arg q "$QUESTION" --argjson c "$CRITERIA" \
+    '{type: "choice", instructions: $q, criteria: $c}')
+fi
+
+BODY=$(jq -cn --arg model "jev-1.13" --arg state "$STATE" \
+  --argjson q "$QUESTION_JSON" \
+  '{model: $model, state: $state, questions: {q: $q}}')
+
+RESPONSE=$(curl -fsS https://openrouter.ai/api/v1/systemone \
+  -H "Authorization: Bearer $(key_for)" \
+  -H "Content-Type: application/json" \
+  -d "$BODY")
+
+printf '%s\n' "$RESPONSE" | jq -r '
+  .answers.q as $a
+  | if $a | has("noul") then ($a.noul | tostring)
+    elif $a | has("choice") then $a.choice
+    else ($a | tostring)
+  end'

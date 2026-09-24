@@ -30,3 +30,25 @@ The command intentionally excludes:
 
 Use the source runtime's skill installation mechanism to add or update a global skill.
 Do not copy credentials, connector configuration, or plugin caches into this repository.
+
+## jev
+
+`jev` asks TypeSafe's Jev decision model (System One) through OpenRouter's
+`/api/v1/systemone` endpoint. It is a structured decision model, not a chat
+model: it returns a typed answer (a confidence or a category) for routing,
+classification, and gating decisions, with free completions and prompt tokens
+at roughly $0.04/M.
+
+```sh
+jev "Customer was charged twice and wants money back." "Are they asking for a refund?"
+# 0.99
+
+jev "App crashes on CSV export." "Which team handles this?" \
+  -c "billing:charges and refunds" -c "technical:bugs and outages"
+# technical
+```
+
+The API key comes from `OPENROUTER_API_KEY`, falling back to opencode's
+`~/.local/share/opencode/auth.json`. Model: `jev-1.13` (routed as
+`typesafe/jev-1.13`); 32k context. See OpenRouter's TypeSafe SDK guide for
+raw request shapes.
