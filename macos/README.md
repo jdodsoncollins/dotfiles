@@ -85,6 +85,14 @@ if the duplicate machine group is not needed.
   a VS Code-style Explorer / Search / Source Control pane next to the active
   pane. Toggle with `herdr plugin action invoke herdr-sidebar.open-sidebar`;
   inside it, `1`/`2`/`3` switch views, `s` opens settings, `b` hides it.
+- `hhdebb/herdr-radar` (third-party) is installed with its daemon running; it
+  writes vendor logos, group keys, and activity sort keys as pane tokens.
+  Its panel takeover is deliberately NOT active: radar refuses to write its
+  managed `config.toml` blocks when hand-written `[theme.custom]` /
+  `[ui.sidebar.*]` tables exist, and this package keeps those to preserve the
+  `herdr-agent-usage` quota panel plus the `$last_reply` / branch / worktree
+  rows. To hand the Agents panel to radar instead, move those tables aside
+  and run `herdr plugin action invoke hhdebb.herdr-radar.state-start`.
 
 - `prefix+shift+r` refreshes quotas, `prefix+shift+q` opens quota settings
   (both bound by `herdr-agent-usage`).
