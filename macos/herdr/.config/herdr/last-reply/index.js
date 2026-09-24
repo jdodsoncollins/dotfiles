@@ -1,10 +1,18 @@
 const { execFile } = require("node:child_process")
+const path = require("node:path")
 
 const herdr = process.env.HERDR_BIN_PATH ?? "herdr"
 
 const run = (args, timeout = 15000) =>
   new Promise((resolve) => {
     execFile(herdr, args, { timeout }, (err, stdout) => resolve(err ? null : stdout))
+  })
+
+const git = (cwd, args) =>
+  new Promise((resolve) => {
+    execFile("git", ["-C", cwd, ...args], { timeout: 5000 }, (err, stdout) =>
+      resolve(err ? null : stdout.trim())
+    )
   })
 
 const result = (out) => {
@@ -47,7 +55,41 @@ const main = async () => {
   const info = (result(await run(["pane", "list"]))?.panes ?? []).find(
     (p) => p.pane_id === pane
   )
-  if (!info?.tab_id) return
+  if (!info) return
+
+  let branch = ""
+  let worktree = ""
+  if (info.cwd && (await git(info.cwd, ["rev-parse", "--is-inside-work-tree"])) === "true") {
+    branch =
+      (await git(info.cwd, ["branch", "--show-current"])) ||
+      (await git(info.cwd, ["rev-parse", "--short", "HEAD"])) ||
+      ""
+    const gitDir = await git(info.cwd, ["rev-parse", "--absolute-git-dir"])
+    let commonDir = await git(info.cwd, ["rev-parse", "--git-common-dir"])
+    if (gitDir && commonDir) {
+      if (!commonDir.startsWith("/")) commonDir = path.resolve(info.cwd, commonDir)
+      if (gitDir !== commonDir) {
+        const topLevel = await git(info.cwd, ["rev-parse", "--show-toplevel"])
+        worktree = topLevel ? path.basename(topLevel) : ""
+      }
+    }
+  }
+
+  if (info.tokens?.branch !== branch || info.tokens?.worktree !== worktree) {
+    await run([
+      "pane",
+      "report-metadata",
+      pane,
+      "--source",
+      "user:last-reply",
+      "--token",
+      `branch=${branch}`,
+      "--token",
+      `worktree=${worktree}`,
+    ])
+  }
+
+  if (!info.tab_id) return
 
   const topic = info.tokens?.quota_topic
   let label =

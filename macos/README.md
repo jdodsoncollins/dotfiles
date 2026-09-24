@@ -57,6 +57,9 @@ if the duplicate machine group is not needed.
   to the opencode session topic and stamps the `$last_reply` time shown beside
   the topic row. Manual tab renames are overwritten on the next status change;
   a fresh tab stays labeled `OpenCode` until its first prompt sets a topic.
+- Each agent row shows its pane's Git branch and, for linked worktree
+  checkouts, the worktree name (`$branch` / `$worktree` tokens reported by
+  the `last-reply` plugin). Main checkouts show only the branch.
 - Quota gauges, model, context, and per-vendor icons come from the third-party
   `herdr-agent-usage` plugin, which is not vendored here:
 
