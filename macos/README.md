@@ -151,6 +151,29 @@ default (`tui.json` `"mouse": true`, unset here), so:
 - Cmd/Ctrl+click on transcript URLs stays broken by opencode's own capture
   (anomalyco/opencode#35286); unrelated to Herdr.
 
+## Collie
+
+[Collie](https://github.com/AltanS/collie) is a self-hosted mobile PWA over
+Herdr: check the agent fleet from a phone, tap to answer blocked agents, and
+get push alerts. Installed via the official script to
+`~/.local/share/collie` (`collie` on PATH, v1.13.1+), running as the
+launchd service `herdr.collie`.
+
+- Config: `~/.config/collie/.env` — `COLLIE_MUX=herdr`,
+  `COLLIE_TRUSTED_USER=jdodsoncollins@github`, `COLLIE_SERVE_PORT=8791`.
+- The serve port is 8791, not 443, because the `wf-dev-ssl-proxy` Docker
+  container binds `*:443` and `*:8443` and shadows tailscale serve. Collie
+  manages its own `tailscale serve` mapping (tailnet only, no funnel):
+  phone URL is `https://jeremy-rk2mn2.tailbaf7e.ts.net:8791`.
+- Security layers: loopback-only bridge (127.0.0.1:8787), serve rejects
+  non-tailnet traffic, and the `Tailscale-User-Login` header gate admits
+  only the trusted tailnet login. For the per-device write gate, run
+  `collie pair` on this Mac and enter the code in Settings on the phone;
+  every write then requires that paired device token. Revoke with
+  `collie devices revoke <label>`.
+- `collie stop` / `collie start` manage the bridge; `tailscale serve status`
+  shows the mapping. Never expose Collie via `tailscale funnel`.
+
 ## Ghostty config path on macOS
 
 Ghostty loads both `~/.config/ghostty/config` and
