@@ -25,6 +25,10 @@ command = ["node", "index.js"]
 on = "tab.focused"
 command = ["node", "index.js"]
 
+[[events]]
+on = "workspace.focused"
+command = ["node", "index.js"]
+
 [[startup]]
 command = ["node", "title-watch.js"]
 

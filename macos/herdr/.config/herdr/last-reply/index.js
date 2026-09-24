@@ -39,7 +39,14 @@ const main = async () => {
   const panes = result(await run(["pane", "list"]))?.panes ?? []
 
   let paneId = data.pane_id ?? data.paneId
-  const tabFromEvent = data.tab_id ?? data.tabId
+  let tabFromEvent = data.tab_id ?? data.tabId
+  const wsFromEvent = data.workspace_id ?? data.workspaceId
+  if (!paneId && !tabFromEvent && wsFromEvent) {
+    const tabs = result(await run(["tab", "list"]))?.tabs ?? []
+    tabFromEvent = tabs.find(
+      (t) => t.workspace_id === wsFromEvent && t.focused
+    )?.tab_id
+  }
   if (!paneId && tabFromEvent) {
     const inTab = panes.filter((p) => p.tab_id === tabFromEvent)
     paneId = (inTab.find((p) => p.agent) ?? inTab[0])?.pane_id
@@ -99,15 +106,16 @@ const main = async () => {
 
   if (!info.tab_id) return
 
-  const topic = info.tokens?.quota_topic
-  let label =
-    typeof topic === "string" && topic.trim()
-      ? topic.trim()
-      : (info.terminal_title_stripped ?? "")
-  label = label
-    .replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, "")
-    .replace(/^OC \| /, "")
-    .trim()
+  const clean = (value) =>
+    typeof value === "string"
+      ? value
+          .replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, "")
+          .replace(/^OC \| /, "")
+          .trim()
+      : ""
+  const title = clean(info.terminal_title_stripped)
+  const topic = clean(info.tokens?.quota_topic)
+  let label = info.agent === "opencode" ? (title || topic) : (topic || title)
   if (!label) return
   if (label.length > 48) label = `${label.slice(0, 47)}…`
 
