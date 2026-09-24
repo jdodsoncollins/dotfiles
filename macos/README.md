@@ -94,14 +94,16 @@ changes, update the other to match.
   a VS Code-style Explorer / Search / Source Control pane next to the active
   pane. Toggle with `herdr plugin action invoke herdr-sidebar.open-sidebar`;
   inside it, `1`/`2`/`3` switch views, `s` opens settings, `b` hides it.
-- `hhdebb/herdr-radar` (third-party) is installed with its daemon running; it
-  writes vendor logos, group keys, and activity sort keys as pane tokens.
-  Its panel takeover is deliberately NOT active: radar refuses to write its
-  managed `config.toml` blocks when hand-written `[theme.custom]` /
-  `[ui.sidebar.*]` tables exist, and this package keeps those to preserve the
-  `herdr-agent-usage` quota panel plus the `$last_reply` / branch / worktree
-  rows. To hand the Agents panel to radar instead, move those tables aside
-  and run `herdr plugin action invoke hhdebb.herdr-radar.state-start`.
+- `eliasstravik/herdr-agent-progress` (third-party) adds an
+  `$agent_progress_summary` sidebar row with each agent's self-reported task
+  estimate and current activity. Reporting adapters exist for Claude Code
+  and Codex only (its configure appends their hooks; opencode does not
+  report), and clients must restart or resume once before they report. It
+  replaced `hhdebb/herdr-radar` (removed via its unconfigure action). To fit
+  the row under herdr's 16-row cap, `30d` was dropped from the
+  herdr-agent-usage `fields` setting
+  (`~/.config/herdr/plugins/config/herdr-agent-usage/fields`); the monthly
+  quota rows no longer render, 5h/7d remain.
 
 - `prefix+shift+r` refreshes quotas, `prefix+shift+q` opens quota settings
   (both bound by `herdr-agent-usage`).
