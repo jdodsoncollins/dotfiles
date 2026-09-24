@@ -47,3 +47,13 @@ initial-command = /bin/zsh -lc herdr
 # Dropdown terminal; needs Privacy → Accessibility permission
 quick-terminal-position = top
 keybind = global:cmd+grave_accent=toggle_quick_terminal
+
+# BEGIN herdr-agent-usage font
+font-codepoint-map = U+E1A0-U+E1B6="Herdr Agent Icons Max"
+font-codepoint-map = U+E1C0-U+E1C5="Herdr Agent Icons Max"
+# END herdr-agent-usage font
+
+# >>> herdr-radar font block
+font-codepoint-map = U+E1A0-U+E1B7=Herdr Agent Icons Max
+font-codepoint-map = U+E1C0-U+E1C5=Herdr Agent Icons Max
+# <<< herdr-radar font block
