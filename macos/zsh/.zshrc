@@ -77,3 +77,8 @@ autoload -Uz compinit && compinit -C
 
 # OpenCode
 export PATH="$HOME/.opencode/bin:$PATH"
+
+# Herdr Automatic Rename: per-command tab naming (herdr plugin)
+for _f in ${HOME}/.config/herdr/plugins/github/herdr-automatic-rename-*/shell/hook.zsh(N); do
+  source $_f; break
+done

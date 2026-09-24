@@ -35,26 +35,8 @@ const main = async () => {
   }
   const data = parsed.data ?? {}
   const eventName = parsed.event ?? data.type ?? ""
-
-  const panes = result(await run(["pane", "list"]))?.panes ?? []
-
-  let paneId = data.pane_id ?? data.paneId
-  let tabFromEvent = data.tab_id ?? data.tabId
-  const wsFromEvent = data.workspace_id ?? data.workspaceId
-  if (!paneId && !tabFromEvent && wsFromEvent) {
-    const tabs = result(await run(["tab", "list"]))?.tabs ?? []
-    tabFromEvent = tabs.find(
-      (t) => t.workspace_id === wsFromEvent && t.focused
-    )?.tab_id
-  }
-  if (!paneId && tabFromEvent) {
-    const inTab = panes.filter((p) => p.tab_id === tabFromEvent)
-    paneId = (inTab.find((p) => p.agent) ?? inTab[0])?.pane_id
-  }
+  const paneId = data.pane_id ?? data.paneId
   if (!paneId) return
-
-  const info = panes.find((p) => p.pane_id === paneId)
-  if (!info) return
 
   if (eventName === "pane_agent_status_changed") {
     const now = new Date()
@@ -71,6 +53,11 @@ const main = async () => {
       `last_reply=${hhmm}`,
     ])
   }
+
+  const info = (result(await run(["pane", "list"]))?.panes ?? []).find(
+    (p) => p.pane_id === paneId
+  )
+  if (!info) return
 
   let branch = ""
   let worktree = ""
@@ -103,28 +90,6 @@ const main = async () => {
       `worktree=${worktree}`,
     ])
   }
-
-  if (!info.tab_id) return
-
-  const clean = (value) =>
-    typeof value === "string"
-      ? value
-          .replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, "")
-          .replace(/^OC \| /, "")
-          .trim()
-      : ""
-  const title = clean(info.terminal_title_stripped)
-  const topic = clean(info.tokens?.quota_topic)
-  let label = info.agent === "opencode" ? (title || topic) : (topic || title)
-  if (!label) return
-  if (label.length > 48) label = `${label.slice(0, 47)}…`
-
-  const tab = (result(await run(["tab", "list"]))?.tabs ?? []).find(
-    (t) => t.tab_id === info.tab_id
-  )
-  if (!tab || tab.label === label) return
-
-  await run(["tab", "rename", info.tab_id, label])
 }
 
 main()
