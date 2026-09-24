@@ -1,8 +1,8 @@
 id = "last-reply"
 name = "Agent Last Reply Time"
-version = "0.2.0"
+version = "0.3.0"
 min_herdr_version = "0.9.0"
-description = "Timestamp each agent pane's most recent reply, name tabs after their opencode session topic, and open new opencode tabs"
+description = "Timestamp each agent pane's most recent reply, keep tab titles fresh (status, focus, session-switch, and tab-switch events), and open new opencode tabs"
 platforms = ["macos", "linux"]
 
 [[events]]
@@ -16,6 +16,17 @@ command = ["node", "index.js"]
 [[events]]
 on = "pane.agent_detected"
 command = ["node", "index.js"]
+
+[[events]]
+on = "pane.moved"
+command = ["node", "index.js"]
+
+[[events]]
+on = "tab.focused"
+command = ["node", "index.js"]
+
+[[startup]]
+command = ["node", "title-watch.js"]
 
 [[actions]]
 id = "new-opencode-tab"

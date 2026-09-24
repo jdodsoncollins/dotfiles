@@ -53,10 +53,15 @@ if the duplicate machine group is not needed.
   `opencode --session <id>` after a Herdr server restart.
 - `prefix+shift+o` opens a new tab running a fresh opencode session
   (`last-reply` plugin's `new-opencode-tab` action).
-- On every agent status change, the `last-reply` plugin renames the pane's tab
-  to the opencode session topic and stamps the `$last_reply` time shown beside
-  the topic row. Manual tab renames are overwritten on the next status change;
-  a fresh tab stays labeled `OpenCode` until its first prompt sets a topic.
+- The `last-reply` plugin renames the pane's tab to the opencode session topic
+  and stamps the `$last_reply` time beside the topic row. Renames refresh on
+  agent status changes, pane focus, tab switches, pane moves, and opencode
+  session switches (`/sessions`). Since plugin event hooks cannot receive
+  `pane.updated` in Herdr 0.9.x, a small startup daemon (`title-watch.js`)
+  subscribes to `pane.updated` over the socket and forwards terminal-title
+  changes to the same script. Manual tab renames are overwritten on the next
+  refresh; a fresh tab stays labeled `OpenCode` until its first prompt sets a
+  topic. `$last_reply` updates only on agent status changes.
 - Each agent row shows its pane's Git branch and, for linked worktree
   checkouts, the worktree name (`$branch` / `$worktree` tokens reported by
   the `last-reply` plugin). Main checkouts show only the branch.

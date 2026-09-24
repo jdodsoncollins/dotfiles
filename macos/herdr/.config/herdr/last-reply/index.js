@@ -27,35 +27,43 @@ const main = async () => {
   const raw = process.env.HERDR_PLUGIN_EVENT_JSON
   if (!raw) return
 
-  let data = {}
+  let parsed = {}
   try {
-    data = JSON.parse(raw).data ?? {}
+    parsed = JSON.parse(raw)
   } catch {
     return
   }
+  const data = parsed.data ?? {}
+  const eventName = parsed.event ?? data.type ?? ""
 
-  const pane = data.pane_id ?? data.paneId
-  if (!pane) return
+  const panes = result(await run(["pane", "list"]))?.panes ?? []
 
-  const now = new Date()
-  const hhmm = [now.getHours(), now.getMinutes()]
-    .map((n) => String(n).padStart(2, "0"))
-    .join(":")
+  let paneId = data.pane_id ?? data.paneId
+  const tabFromEvent = data.tab_id ?? data.tabId
+  if (!paneId && tabFromEvent) {
+    const inTab = panes.filter((p) => p.tab_id === tabFromEvent)
+    paneId = (inTab.find((p) => p.agent) ?? inTab[0])?.pane_id
+  }
+  if (!paneId) return
 
-  await run([
-    "pane",
-    "report-metadata",
-    pane,
-    "--source",
-    "user:last-reply",
-    "--token",
-    `last_reply=${hhmm}`,
-  ])
-
-  const info = (result(await run(["pane", "list"]))?.panes ?? []).find(
-    (p) => p.pane_id === pane
-  )
+  const info = panes.find((p) => p.pane_id === paneId)
   if (!info) return
+
+  if (eventName === "pane_agent_status_changed") {
+    const now = new Date()
+    const hhmm = [now.getHours(), now.getMinutes()]
+      .map((n) => String(n).padStart(2, "0"))
+      .join(":")
+    await run([
+      "pane",
+      "report-metadata",
+      paneId,
+      "--source",
+      "user:last-reply",
+      "--token",
+      `last_reply=${hhmm}`,
+    ])
+  }
 
   let branch = ""
   let worktree = ""
@@ -79,7 +87,7 @@ const main = async () => {
     await run([
       "pane",
       "report-metadata",
-      pane,
+      paneId,
       "--source",
       "user:last-reply",
       "--token",
