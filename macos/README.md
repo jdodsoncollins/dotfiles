@@ -173,6 +173,13 @@ launchd service `herdr.collie`.
   `collie devices revoke <label>`.
 - `collie stop` / `collie start` manage the bridge; `tailscale serve status`
   shows the mapping. Never expose Collie via `tailscale funnel`.
+- Web Push: `collie push-keys mailto:jdodsoncollins@github.com` wrote the
+  VAPID keypair to the `.env` (mode 600); after a restart, verify with
+  `collie push-test`. Each phone subscribes once in Settings → push (iOS
+  needs the PWA added to the Home Screen first — Safari tabs cannot receive
+  web push). `--force` regenerates keys and invalidates every subscription;
+  alerts fire on agent blocked by default, agent done and prompt-cache
+  expiry are opt-in switches under Settings → Notify when.
 
 ## Ghostty config path on macOS
 
