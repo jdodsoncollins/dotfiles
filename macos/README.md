@@ -81,6 +81,15 @@ if the duplicate machine group is not needed.
 
 - `prefix+shift+r` refreshes quotas, `prefix+shift+q` opens quota settings
   (both bound by `herdr-agent-usage`).
+- Sidebar gauge percentages print **used** (matching opencode's own
+  `% used` footer). The plugin defaults to percent *remaining*, which looks
+  out of sync next to opencode; the setting lives at
+  `~/.config/herdr/plugins/config/herdr-agent-usage/quota-percent`. Gauge
+  colors always indicate remaining headroom regardless. Gauges refresh on
+  agent status changes, pane/tab/workspace focus, the plugin's background
+  watcher (default 60s), and a final refresh after each turn settles;
+  mid-turn they trail by the in-flight turn because they read completed
+  messages.
 
 Fresh machine setup after `./install.sh` stows this package:
 
