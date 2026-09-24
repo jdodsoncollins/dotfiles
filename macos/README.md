@@ -46,6 +46,15 @@ keybinds) and the `last-reply` plugin at `.config/herdr/last-reply/`, stowed to
 saved `rk2mn2` SSH profile points back to this Mac. Remove that saved profile
 if the duplicate machine group is not needed.
 
+### Unified Tokyo Night palette
+
+The HerdR `[theme.custom]` palette and the VS Code sidebar
+(`workbench.colorCustomizations` in the vscode package) are the same Tokyo
+Night values, so the terminal and editor chrome read as one app:
+`#16161e` sidebar background, `#1a1b26` panels and status bar, `#283457`
+active rows, `#3d59a1` navigate selection, `#7aa2f7` accent. If either side
+changes, update the other to match.
+
 ### opencode + HerdR: one tab = one session
 
 - Each opencode pane reports its root session to HerdR
