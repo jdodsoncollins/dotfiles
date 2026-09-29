@@ -73,6 +73,17 @@ changes, update the other to match.
   status change. `kryptamine/herdr-auto-title` was evaluated and rejected:
   its 2 Hz poll has no event gaps, but it does not strip opencode's `OC |`
   title prefix and requires a Go toolchain.
+- One tab per opencode session: `session-tabs.js` (opencode package,
+  stowed to `~/.config/opencode/plugins/`) watches session events inside
+  each opencode instance. When a pane's session departs (`/new` or a
+  `/sessions` switch), it spawns a non-focused tab resuming the departed
+  session via `opencode --session <id>` — unless another pane already hosts
+  it, and it follows compaction continuations (child sessions) without
+  spawning. It no-ops when herdr is unreachable. It loads at opencode start,
+  so existing panes need one restart to pick it up; tabs it spawns load it
+  automatically. Closing a tab never deletes the session — reopen it from
+  `/sessions`. The same session can still be opened in two panes by hand;
+  the plugin only guards its own spawns.
 - The `last-reply` plugin reports sidebar metadata only: the `$last_reply`
   time (updated on agent status changes), each pane's Git branch and
   worktree, and the `prefix+shift+o` new-opencode-tab action. Task names are
