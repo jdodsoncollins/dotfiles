@@ -73,17 +73,20 @@ changes, update the other to match.
   status change. `kryptamine/herdr-auto-title` was evaluated and rejected:
   its 2 Hz poll has no event gaps, but it does not strip opencode's `OC |`
   title prefix and requires a Go toolchain.
-- One tab per opencode session: `session-tabs.js` (opencode package,
-  stowed to `~/.config/opencode/plugins/`) watches session events inside
-  each opencode instance. When a pane's session departs (`/new` or a
-  `/sessions` switch), it spawns a non-focused tab resuming the departed
-  session via `opencode --session <id>` — unless another pane already hosts
-  it, and it follows compaction continuations (child sessions) without
-  spawning. It no-ops when herdr is unreachable. It loads at opencode start,
-  so existing panes need one restart to pick it up; tabs it spawns load it
-  automatically. Closing a tab never deletes the session — reopen it from
-  `/sessions`. The same session can still be opened in two panes by hand;
-  the plugin only guards its own spawns.
+- One tab per opencode session: `session-tabs.js` is a TUI plugin
+  registered in `tui.jsonc` (both stowed to `~/.config/opencode/`). It polls
+  the TUI route, because switching sessions is client-side navigation that
+  server plugins never see. When a pane leaves a session (`/new` or a
+  `/sessions` switch), it spawns a non-focused tab resuming that session via
+  `opencode --session <id>`, unless another pane already hosts it. Subagent
+  child sessions resolve to their root, so opening one never spawns. It
+  no-ops when herdr is unreachable. It loads at opencode start, so existing
+  panes need one restart; tabs it spawns load it automatically. Closing a
+  tab never deletes the session. The same session can still be opened in
+  two panes by hand; the plugin only guards its own spawns.
+- `tui.jsonc` also lists herdr's `herdr-tui-session.js`. Reinstalling the
+  herdr opencode integration rewrites that file and breaks the symlink;
+  copy the live file back, re-add `./session-tabs.js`, and re-link.
 - The `last-reply` plugin reports sidebar metadata only: the `$last_reply`
   time (updated on agent status changes), each pane's Git branch and
   worktree, and the `prefix+shift+o` new-opencode-tab action. Task names are
