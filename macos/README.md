@@ -87,6 +87,16 @@ changes, update the other to match.
 - `tui.jsonc` also lists herdr's `herdr-tui-session.js`. Reinstalling the
   herdr opencode integration rewrites that file and breaks the symlink;
   copy the live file back, re-add `./session-tabs.js`, and re-link.
+- No duplicate session panes: herdr 0.9.1 has no dedupe setting, so the local
+  `session-dedupe` plugin (`~/.config/herdr/session-dedupe`, linked with
+  `herdr plugin link ~/Projects/dotfiles/macos/herdr/.config/herdr/session-dedupe`)
+  enforces one pane per agent session. The pane that is busy, or else the one
+  that opened the session first, is kept. If you open a session that is already
+  live, focus jumps to the existing tab, and the idle duplicate closes after
+  15s (the grace period lets `session-tabs` finish spawning the session you
+  left). Its tab closes too if only the herdr-sidebar dock remains. Busy panes
+  are never closed. Hook events do not fire on session switches, so
+  `session-tabs` calls the plugin's `scan` action after each `/sessions` pick.
 - The `last-reply` plugin reports sidebar metadata only: the `$last_reply`
   time (updated on agent status changes), each pane's Git branch and
   worktree, and the `prefix+shift+o` new-opencode-tab action. Task names are

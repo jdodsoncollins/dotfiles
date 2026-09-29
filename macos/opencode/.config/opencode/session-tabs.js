@@ -122,6 +122,12 @@ export default {
       const departed = selected
       selected = id
       if (departed) void spawnTabFor(departed).catch(() => {})
+      if (id) {
+        const timer = setTimeout(() => {
+          void run(["plugin", "action", "invoke", "scan", "--plugin", "session-dedupe"])
+        }, 1500)
+        timer.unref?.()
+      }
     }
 
     tick()
