@@ -1,0 +1,1233 @@
+diff --git a/docs/next/website/src/content/docs/configuration.mdx b/docs/next/website/src/content/docs/configuration.mdx
+index 1975a43..2e64ffd 100644
+--- a/docs/next/website/src/content/docs/configuration.mdx
++++ b/docs/next/website/src/content/docs/configuration.mdx
+@@ -121,6 +121,16 @@ manage_ssh_config = true
+ 
+ When enabled, `herdr --remote` writes a private temporary SSH config that includes your user and system SSH configs first, then adds fallback `ServerAliveInterval` and `ServerAliveCountMax` values. Your own keepalive settings win. Linux and macOS clients also use a private per-attach OpenSSH control socket to reuse the first authenticated connection; Windows OpenSSH does not. Set `manage_ssh_config = false` to run remote attach through plain `ssh` without Herdr's generated config or control socket.
+ 
++Saved machines that point back to the local host can be hidden from the client's machine list:
++
++```toml
++[remote.local_machine_aliases]
++"my-laptop" = ["laptop", "my-laptop"]
++"my-desktop" = ["desktop"]
++```
++
++Each key is the local hostname. Its aliases match saved SSH labels or targets exactly, ignoring ASCII case. Only the entry for the current hostname applies. Other hosts, or hosts without an entry, keep all saved machines. This filters the client view without removing profiles from `endpoints.json`. Alias settings are read when the client attaches; detach and reattach after changing them. Reloading server configuration does not update this filter.
++
+ ## Keybindings
+ 
+ For a guided introduction to the prefix and a vetted prefix-free setup, see [Keyboard](/docs/keyboard/).
+@@ -233,6 +243,18 @@ description = "apply layout"
+ 
+ `description` is optional. When set, it appears in the keybind help panel (opened with `prefix+?`) instead of the default `'custom command'` label.
+ 
++To expose `Toggle Explorer` in the client menu and mobile switcher, register the sidebar plugin action with that exact description:
++
++```toml
++[[keys.command]]
++key = "prefix+shift+e"
++type = "plugin_action"
++command = "herdr-sidebar.open-sidebar"
++description = "Toggle Explorer"
++```
++
++The control appears only when the connected server advertises the command. Reload the server configuration after adding the binding. The client invokes the advertised command ID; no server upgrade is required.
++
+ Custom commands receive `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, `HERDR_ACTIVE_WORKSPACE_ID`, `HERDR_ACTIVE_TAB_ID`, `HERDR_ACTIVE_PANE_ID`, and `HERDR_ACTIVE_PANE_CWD` when those values are available. Shell commands run from the focused pane's working directory when Herdr can detect it.
+ 
+ On Windows, custom command strings use `cmd.exe /d /c`, so environment variables use `%HERDR_BIN_PATH%` syntax. To run PowerShell syntax, invoke it explicitly, for example `powershell.exe -NoProfile -Command "..."`.
+diff --git a/src/client/catalog_reload.rs b/src/client/catalog_reload.rs
+index a20b74d..4268202 100644
+--- a/src/client/catalog_reload.rs
++++ b/src/client/catalog_reload.rs
+@@ -3,12 +3,16 @@ use super::*;
+ pub(super) fn watch_profiles(
+     event_tx: tokio::sync::mpsc::Sender<ClientLoopEvent>,
+     should_quit: Arc<AtomicBool>,
++    remote: crate::config::RemoteConfig,
+ ) {
+     // One bounded read per second per client, independent of rendering and pane count.
+     std::thread::spawn(move || {
++        let hostname = crate::platform::hostname();
+         let mut previous = None;
+         while !should_quit.load(Ordering::Acquire) {
+-            let current = endpoint::EndpointCatalog::load_profiles();
++            let current = endpoint::EndpointCatalog::load_profiles().map(|profiles| {
++                endpoint::profiles_for_local_machine(&profiles, &remote, hostname.as_deref())
++            });
+             if previous.as_ref() != Some(&current) {
+                 previous = Some(current.clone());
+                 if event_tx
+diff --git a/src/client/endpoint/catalog.rs b/src/client/endpoint/catalog.rs
+index 23f2638..389826d 100644
+--- a/src/client/endpoint/catalog.rs
++++ b/src/client/endpoint/catalog.rs
+@@ -226,6 +226,22 @@ impl EndpointCatalog {
+         self.ssh.iter().any(|profile| profile.enabled)
+     }
+ 
++    pub(crate) fn local_machine_view(
++        mut self,
++        remote: &crate::config::RemoteConfig,
++        hostname: Option<&str>,
++    ) -> Self {
++        self.ssh = profiles_for_local_machine(&self.ssh, remote, hostname);
++        if self
++            .selected_profile
++            .as_ref()
++            .is_some_and(|selected| !self.ssh.iter().any(|profile| &profile.id == selected))
++        {
++            self.select_local();
++        }
++        self
++    }
++
+     pub(crate) fn contains_enabled_target_session(&self, target: &str, session: &str) -> bool {
+         self.ssh.iter().any(|profile| {
+             profile.enabled && profile.target == target && profile.session == session
+@@ -366,6 +382,26 @@ fn store_private_json(path: &Path, content: &[u8], description: &str) -> Result<
+         .map_err(|error| format!("failed to persist {description} directory: {error}"))
+ }
+ 
++pub(crate) fn profiles_for_local_machine(
++    profiles: &[SavedSshEndpoint],
++    remote: &crate::config::RemoteConfig,
++    hostname: Option<&str>,
++) -> Vec<SavedSshEndpoint> {
++    profiles
++        .iter()
++        .filter(|profile| {
++            !remote.local_machine_aliases.iter().any(|(host, aliases)| {
++                hostname.is_some_and(|hostname| hostname.eq_ignore_ascii_case(host))
++                    && aliases.iter().any(|alias| {
++                        profile.label.eq_ignore_ascii_case(alias)
++                            || profile.target.eq_ignore_ascii_case(alias)
++                    })
++            })
++        })
++        .cloned()
++        .collect()
++}
++
+ pub(crate) fn catalog_path() -> PathBuf {
+     crate::config::state_dir()
+         .join("client")
+@@ -391,6 +427,83 @@ mod tests {
+             .join("endpoints.json")
+     }
+ 
++    #[test]
++    fn local_machine_aliases_filter_runtime_view_without_changing_saved_profiles() {
++        let config: crate::config::Config = toml::from_str(
++            r#"
++[remote.local_machine_aliases]
++Jeremy-RK2MN2 = ["rk2mn2", "jeremy-rk2mn2"]
++build-host = ["build"]
++"#,
++        )
++        .unwrap();
++        let mut catalog = EndpointCatalog::default();
++        let self_id = catalog
++            .add_ssh("RK2MN2", "jeremy-rk2mn2", "default")
++            .unwrap();
++        let target_id = catalog
++            .add_ssh("Other label", "JEREMY-RK2MN2", "agents")
++            .unwrap();
++        let other_id = catalog.add_ssh("Build", "build", "default").unwrap();
++        assert!(catalog.select_ssh(&self_id));
++        let path = path("local-machine-aliases");
++        catalog.store_to_path(&path).unwrap();
++        let saved = std::fs::read(&path).unwrap();
++
++        for hostname in ["Jeremy-RK2MN2", "jeremy-rk2mn2", "JEREMY-RK2MN2"] {
++            let view = catalog
++                .clone()
++                .local_machine_view(&config.remote, Some(hostname));
++            assert_eq!(view.ssh.len(), 1);
++            assert_eq!(view.ssh[0].id, other_id);
++            assert_eq!(view.selected_profile, None);
++            assert!(!view.ssh.iter().any(|profile| profile.id == target_id));
++            let shell_config = crate::client::shell::ClientShellConfig::from_config(&config);
++            let mut shell = crate::client::shell::ClientShellState::new(shell_config);
++            shell.set_endpoint_catalog(&view.ssh);
++            assert!(view.has_enabled_ssh());
++        }
++        for hostname in [Some("travel-laptop"), None] {
++            assert_eq!(
++                catalog.clone().local_machine_view(&config.remote, hostname),
++                catalog
++            );
++        }
++        let build_view = catalog
++            .clone()
++            .local_machine_view(&config.remote, Some("build-host"));
++        assert_eq!(build_view.ssh.len(), 2);
++        assert_eq!(build_view.selected_profile, Some(self_id));
++        assert!(!build_view.ssh.iter().any(|profile| profile.id == other_id));
++        assert_eq!(std::fs::read(&path).unwrap(), saved);
++        assert_eq!(EndpointCatalog::load_from_path(&path).unwrap(), catalog);
++        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
++    }
++
++    #[test]
++    fn local_machine_aliases_default_to_all_profiles_and_self_only_uses_local() {
++        let mut catalog = EndpointCatalog::default();
++        catalog
++            .add_ssh("rk2mn2", "jeremy-rk2mn2", "default")
++            .unwrap();
++        let config: crate::config::Config =
++            toml::from_str("[remote.local_machine_aliases]\nJeremy-RK2MN2 = [\"rk2mn2\"]").unwrap();
++        assert!(crate::config::Config::default()
++            .remote
++            .local_machine_aliases
++            .is_empty());
++        assert_eq!(
++            catalog.clone().local_machine_view(
++                &crate::config::Config::default().remote,
++                Some("Jeremy-RK2MN2")
++            ),
++            catalog
++        );
++        let view = catalog.local_machine_view(&config.remote, Some("Jeremy-RK2MN2"));
++        assert!(!view.has_enabled_ssh());
++        assert!(view.ssh.is_empty());
++    }
++
+     #[test]
+     fn catalog_roundtrip_persists_profiles_without_secret_fields() {
+         let path = path("roundtrip");
+diff --git a/src/client/loop_config.rs b/src/client/loop_config.rs
+index 53ef9f3..02a5c74 100644
+--- a/src/client/loop_config.rs
++++ b/src/client/loop_config.rs
+@@ -13,4 +13,5 @@ pub(super) struct ClientLoopConfig {
+     pub(super) remote_image_paste_key:
+         Option<(crossterm::event::KeyCode, crossterm::event::KeyModifiers)>,
+     pub(super) shell_config: Option<shell::ClientShellConfig>,
++    pub(super) remote_config: crate::config::RemoteConfig,
+ }
+diff --git a/src/client/mod.rs b/src/client/mod.rs
+index cb46509..91b536d 100644
+--- a/src/client/mod.rs
++++ b/src/client/mod.rs
+@@ -193,6 +193,7 @@ fn run_client_with_mode(
+         endpoint_keybindings,
+         remote_image_paste_key,
+         shell_config,
++        remote_config: loaded_config.config.remote.clone(),
+     };
+ 
+     crate::logging::startup("client");
+@@ -206,6 +207,10 @@ fn run_client_with_mode(
+     } else {
+         endpoint::EndpointCatalog::default()
+     };
++    let endpoint_catalog = endpoint_catalog.local_machine_view(
++        &loop_config.remote_config,
++        crate::platform::hostname().as_deref(),
++    );
+     let federated = endpoint_catalog.has_enabled_ssh();
+ 
+     let initial_stream = match crate::ipc::connect_local_stream(&socket_path) {
+@@ -586,7 +591,7 @@ async fn run_client_loop(
+     let mut scheduled_activation = None;
+     let mut pending_catalog: Option<Result<Vec<endpoint::SavedSshEndpoint>, String>> = None;
+     if state.shell.is_some() && !is_remote_client && state.attach_escape.is_none() {
+-        catalog_reload::watch_profiles(event_tx.clone(), should_quit.clone());
++        catalog_reload::watch_profiles(event_tx.clone(), should_quit.clone(), config.remote_config);
+     }
+ 
+     // This (foreground) client owns the prefix ASCII input-source switch
+diff --git a/src/client/shell/actions.rs b/src/client/shell/actions.rs
+index 12d8cc1..4d49002 100644
+--- a/src/client/shell/actions.rs
++++ b/src/client/shell/actions.rs
+@@ -142,6 +142,7 @@ impl ClientShellState {
+                 }
+                 if action == crate::input::KeybindAction::WorkspacePicker {
+                     self.mobile_switcher_scroll = 0;
++                    self.mobile_show_more = false;
+                     self.reveal_mobile_workspace = false;
+                     self.mode = ClientShellMode::Navigate;
+                     self.navigate_workspace_id = self.focused_navigation_target();
+diff --git a/src/client/shell/composition.rs b/src/client/shell/composition.rs
+index e0888d0..7b8c321 100644
+--- a/src/client/shell/composition.rs
++++ b/src/client/shell/composition.rs
+@@ -578,6 +578,7 @@ impl ClientShellState {
+                 &self.endpoints,
+                 &self.active_endpoint_id,
+                 &self.config,
++                self.mobile_show_more,
+                 self.navigate_workspace_id
+                     .as_ref()
+                     .filter(|_| valid_navigation_target),
+diff --git a/src/client/shell/global_menu.rs b/src/client/shell/global_menu.rs
+index e5bd6f7..1753a6a 100644
+--- a/src/client/shell/global_menu.rs
++++ b/src/client/shell/global_menu.rs
+@@ -4,6 +4,16 @@ use super::*;
+ pub(super) enum ClientGlobalMenuAction {
+     Binding(crate::input::KeybindAction),
+     WhatsNew,
++    ToggleExplorer,
++}
++
++pub(super) fn explorer_command(
++    snapshot: &ClientShellSnapshot,
++) -> Option<&crate::protocol::ClientShellCommand> {
++    snapshot.commands.iter().find(|command| {
++        command.action == crate::protocol::ClientShellCommandAction::PluginAction
++            && command.description.as_deref() == Some("Toggle Explorer")
++    })
+ }
+ 
+ pub(super) fn global_menu_attention(snapshot: &ClientShellSnapshot) -> bool {
+@@ -50,10 +60,31 @@ pub(super) fn global_menu_items(
+         "detach",
+         ClientGlobalMenuAction::Binding(crate::input::KeybindAction::Detach),
+     ));
++    if explorer_command(snapshot).is_some() {
++        items.push(("Toggle Explorer", ClientGlobalMenuAction::ToggleExplorer));
++    }
+     items
+ }
+ 
+ impl ClientShellState {
++    pub(super) fn toggle_explorer(&mut self, outcome: &mut ClientShellInput) {
++        let Some(command) = self.snapshot.as_deref().and_then(explorer_command) else {
++            return;
++        };
++        let binding = crate::config::CustomCommandKeybind {
++            bindings: Default::default(),
++            label: command.binding_label.clone(),
++            command: command.command_id.clone(),
++            action: crate::config::CustomCommandAction::PluginAction,
++            description: command.description.clone(),
++            width: None,
++            height: None,
++        };
++        self.mode = ClientShellMode::Terminal;
++        self.navigate_workspace_id = None;
++        self.record_binding(crate::input::KeybindMatch::Command(binding), outcome);
++    }
++
+     pub(super) fn toggle_global_menu(&mut self) {
+         if matches!(self.overlay, Some(ClientShellOverlay::GlobalMenu(_))) {
+             self.overlay = None;
+@@ -104,6 +135,7 @@ impl ClientShellState {
+                 self.record_binding(crate::input::KeybindMatch::Action(binding), outcome)
+             }
+             ClientGlobalMenuAction::WhatsNew => self.open_release_notes(),
++            ClientGlobalMenuAction::ToggleExplorer => self.toggle_explorer(outcome),
+         }
+         outcome.repaint = true;
+     }
+diff --git a/src/client/shell/mobile.rs b/src/client/shell/mobile.rs
+index 8f06f54..959f4d5 100644
+--- a/src/client/shell/mobile.rs
++++ b/src/client/shell/mobile.rs
+@@ -367,6 +367,7 @@ pub(super) fn render_mobile_switcher(
+     endpoints: &[ClientShellEndpoint],
+     active_endpoint_id: &ClientEndpointId,
+     config: &ClientShellConfig,
++    show_more: bool,
+     selected_workspace_id: Option<&WorkspaceNavigationTarget>,
+     scroll: &mut usize,
+     reveal_workspace: &mut bool,
+@@ -441,6 +442,7 @@ pub(super) fn render_mobile_switcher(
+         endpoints,
+         active_endpoint_id,
+         config,
++        show_more,
+         selected_workspace_id,
+         viewport.width.saturating_sub(1),
+     );
+@@ -577,17 +579,26 @@ fn mobile_items(
+     endpoints: &[ClientShellEndpoint],
+     active_endpoint_id: &ClientEndpointId,
+     config: &ClientShellConfig,
++    show_more: bool,
+     selected_workspace_id: Option<&WorkspaceNavigationTarget>,
+     content_width: u16,
+ ) -> Vec<MobileItem> {
+     let palette = &config.palette;
+-    let mut items = Vec::new();
+-    if endpoints.len() > 1 {
+-        items.push(MobileItem::section("machines", palette));
++    let mut items = mobile_tab_items(snapshot, active_endpoint_id, palette, content_width);
++    if super::global_menu::explorer_command(snapshot).is_some() {
++        items.push(MobileItem::action(
++            "  Toggle Explorer",
++            ClientMobileTarget::ToggleExplorer,
++            palette,
++        ));
++    }
++    let mut extra_items = Vec::new();
++    if show_more && endpoints.len() > 1 {
++        extra_items.push(MobileItem::section("machines", palette));
+         for endpoint in endpoints {
+             let background = palette.panel_bg;
+             let (symbol, state, color) = endpoint_status_presentation(endpoint.status, palette);
+-            items.push(MobileItem {
++            extra_items.push(MobileItem {
+                 lines: vec![
+                     Line::from(vec![
+                         Span::styled("  ", Style::default().bg(background)),
+@@ -610,13 +621,28 @@ fn mobile_items(
+             });
+         }
+     }
+-    let agents = super::aggregate_navigation::aggregate_agent_rows(
++    let mut agents = super::aggregate_navigation::aggregate_agent_rows(
+         endpoints,
+         active_endpoint_id,
+         config.agent_panel_sort,
+     );
++    agents.sort_by_key(|row| match row.agent.agent_status {
++        crate::api::schema::AgentStatus::Blocked => 0,
++        crate::api::schema::AgentStatus::Working => 1,
++        crate::api::schema::AgentStatus::Done => 2,
++        _ => 3,
++    });
++    let needs_attention = |row: &super::aggregate_navigation::AggregateAgentRow<'_>| {
++        !row.endpoint.stale()
++            && matches!(
++                row.agent.agent_status,
++                crate::api::schema::AgentStatus::Blocked
++                    | crate::api::schema::AgentStatus::Working
++                    | crate::api::schema::AgentStatus::Done
++            )
++    };
+     let agent_view_label = snapshot.agent_view_label.as_deref();
+-    if !agents.is_empty() || agent_view_label.is_some() {
++    if agents.iter().any(&needs_attention) || agent_view_label.is_some() {
+         let title = agent_view_label
+             .map(|label| format!("agents · {label}"))
+             .unwrap_or_else(|| "agents".to_owned());
+@@ -634,119 +660,145 @@ fn mobile_items(
+                 target: None,
+             });
+         }
+-        for row in agents {
+-            let endpoint = row.endpoint;
+-            let agent = row.agent;
+-            let workspace = endpoint
+-                .snapshot
+-                .workspaces
+-                .iter()
+-                .find(|workspace| workspace.workspace_id == agent.workspace_id);
+-            let tab = endpoint
+-                .snapshot
+-                .tabs
+-                .iter()
+-                .find(|tab| tab.tab_id == agent.tab_id);
+-            let agent_label = agent
+-                .display_agent
+-                .as_deref()
+-                .or(agent.name.as_deref())
+-                .or(agent.agent.as_deref())
+-                .unwrap_or("agent");
+-            let primary = workspace
+-                .map(|workspace| workspace.label.as_str())
+-                .unwrap_or(agent_label);
+-            let mut detail = Vec::new();
+-            let workspace_tab_count = endpoint
+-                .snapshot
+-                .tabs
++    }
++    if show_more && agents.iter().any(|row| !needs_attention(row)) {
++        extra_items.push(MobileItem::section("other agents", palette));
++    }
++    for row in agents {
++        let attention = needs_attention(&row);
++        if !attention && !show_more {
++            continue;
++        }
++        let endpoint = row.endpoint;
++        let agent = row.agent;
++        let workspace = endpoint
++            .snapshot
++            .workspaces
++            .iter()
++            .find(|workspace| workspace.workspace_id == agent.workspace_id);
++        let tab = endpoint
++            .snapshot
++            .tabs
++            .iter()
++            .find(|tab| tab.tab_id == agent.tab_id);
++        let agent_label = agent
++            .display_agent
++            .as_deref()
++            .or(agent.name.as_deref())
++            .or(agent.agent.as_deref())
++            .unwrap_or("agent");
++        let primary = workspace
++            .map(|workspace| workspace.label.as_str())
++            .unwrap_or(agent_label);
++        let mut detail = Vec::new();
++        let workspace_tab_count = endpoint
++            .snapshot
++            .tabs
++            .iter()
++            .filter(|candidate| candidate.workspace_id == agent.workspace_id)
++            .count();
++        if let Some(tab) = tab.filter(|tab| tab.custom_label || workspace_tab_count > 1) {
++            detail.push(tab.label.clone());
++        }
++        let status_key = status_text(agent.agent_status);
++        detail.push(
++            agent
++                .state_labels
+                 .iter()
+-                .filter(|candidate| candidate.workspace_id == agent.workspace_id)
+-                .count();
+-            if let Some(tab) = tab.filter(|tab| tab.custom_label || workspace_tab_count > 1) {
+-                detail.push(tab.label.clone());
+-            }
+-            let status_key = status_text(agent.agent_status);
+-            detail.push(
+-                agent
+-                    .state_labels
+-                    .iter()
+-                    .find(|(key, _)| key == status_key)
+-                    .map(|(_, label)| label.clone())
+-                    .unwrap_or_else(|| {
+-                        if agent.agent_status == crate::api::schema::AgentStatus::Unknown {
+-                            "idle".to_owned()
+-                        } else {
+-                            status_key.to_owned()
+-                        }
+-                    }),
+-            );
+-            detail.push(agent_label.to_owned());
+-            if endpoint.stale() {
+-                detail.push(mobile_endpoint_state(endpoint.status).to_owned());
+-            }
+-            let background = if endpoint.endpoint_id == active_endpoint_id && agent.focused {
+-                palette.surface_dim
+-            } else {
+-                palette.panel_bg
+-            };
+-            let foreground = if endpoint.stale() {
+-                palette.overlay0
+-            } else {
+-                palette.text
+-            };
+-            let dim = if endpoint.stale() {
+-                Modifier::DIM
+-            } else {
+-                Modifier::empty()
+-            };
+-            items.push(MobileItem {
+-                lines: vec![
+-                    Line::from(vec![
+-                        Span::styled("  ", Style::default().bg(background)),
+-                        Span::styled(
+-                            status_icon(agent.agent_status, config.status_indicators),
+-                            Style::default()
+-                                .fg(if endpoint.stale() {
+-                                    palette.overlay0
+-                                } else {
+-                                    status_color(agent.agent_status, palette)
+-                                })
+-                                .bg(background)
+-                                .add_modifier(dim),
+-                        ),
+-                        Span::styled(" ", Style::default().bg(background)),
+-                        Span::styled(
+-                            crate::ui::truncate_end(
+-                                &format!("{} · {primary}", endpoint.label),
+-                                usize::from(content_width.saturating_sub(5)),
+-                            ),
+-                            Style::default()
+-                                .fg(foreground)
+-                                .bg(background)
+-                                .add_modifier(Modifier::BOLD | dim),
+-                        ),
+-                    ]),
+-                    Line::from(Span::styled(
++                .find(|(key, _)| key == status_key)
++                .map(|(_, label)| label.clone())
++                .unwrap_or_else(|| {
++                    if agent.agent_status == crate::api::schema::AgentStatus::Unknown {
++                        "idle".to_owned()
++                    } else {
++                        status_key.to_owned()
++                    }
++                }),
++        );
++        detail.push(agent_label.to_owned());
++        if endpoint.stale() {
++            detail.push(mobile_endpoint_state(endpoint.status).to_owned());
++        }
++        let background = if endpoint.endpoint_id == active_endpoint_id && agent.focused {
++            palette.surface_dim
++        } else {
++            palette.panel_bg
++        };
++        let foreground = if endpoint.stale() {
++            palette.overlay0
++        } else {
++            palette.text
++        };
++        let dim = if endpoint.stale() {
++            Modifier::DIM
++        } else {
++            Modifier::empty()
++        };
++        let target_items = if attention {
++            &mut items
++        } else {
++            &mut extra_items
++        };
++        target_items.push(MobileItem {
++            lines: vec![
++                Line::from(vec![
++                    Span::styled("  ", Style::default().bg(background)),
++                    Span::styled(
++                        status_icon(agent.agent_status, config.status_indicators),
++                        Style::default()
++                            .fg(if endpoint.stale() {
++                                palette.overlay0
++                            } else {
++                                status_color(agent.agent_status, palette)
++                            })
++                            .bg(background)
++                            .add_modifier(dim),
++                    ),
++                    Span::styled(" ", Style::default().bg(background)),
++                    Span::styled(
+                         crate::ui::truncate_end(
+-                            &format!("  {}", detail.join(" · ")),
+-                            usize::from(content_width),
++                            &format!("{} · {primary}", endpoint.label),
++                            usize::from(content_width.saturating_sub(5)),
+                         ),
+                         Style::default()
+-                            .fg(palette.overlay0)
++                            .fg(foreground)
+                             .bg(background)
+-                            .add_modifier(dim),
+-                    )),
+-                ],
+-                background,
+-                target: Some(ClientMobileTarget::Agent {
+-                    endpoint_id: endpoint.endpoint_id.clone(),
+-                    pane_id: agent.pane_id.clone(),
+-                }),
+-            });
+-        }
++                            .add_modifier(Modifier::BOLD | dim),
++                    ),
++                ]),
++                Line::from(Span::styled(
++                    crate::ui::truncate_end(
++                        &format!("  {}", detail.join(" · ")),
++                        usize::from(content_width),
++                    ),
++                    Style::default()
++                        .fg(palette.overlay0)
++                        .bg(background)
++                        .add_modifier(dim),
++                )),
++            ],
++            background,
++            target: Some(ClientMobileTarget::Agent {
++                endpoint_id: endpoint.endpoint_id.clone(),
++                pane_id: agent.pane_id.clone(),
++            }),
++        });
+     }
+ 
++    items.push(MobileItem::action(
++        if show_more {
++            "  More [-]"
++        } else {
++            "  More [+]"
++        },
++        ClientMobileTarget::More,
++        palette,
++    ));
++    if !show_more {
++        return items;
++    }
++    items.extend(extra_items);
++
+     items.push(MobileItem::section("spaces", palette));
+     items.push(MobileItem::action(
+         "  + new workspace",
+@@ -873,6 +925,33 @@ fn mobile_items(
+         }
+     }
+ 
++    items.push(MobileItem::section("menu", palette));
++    for (index, (label, action)) in super::global_menu::global_menu_items(snapshot)
++        .into_iter()
++        .enumerate()
++    {
++        if action == super::global_menu::ClientGlobalMenuAction::ToggleExplorer {
++            continue;
++        }
++        items.push(MobileItem {
++            lines: vec![Line::from(Span::styled(
++                format!("  {label}"),
++                Style::default().fg(palette.overlay1).bg(palette.panel_bg),
++            ))],
++            background: palette.panel_bg,
++            target: Some(ClientMobileTarget::Menu(index)),
++        });
++    }
++    items
++}
++
++fn mobile_tab_items(
++    snapshot: &ClientShellSnapshot,
++    active_endpoint_id: &ClientEndpointId,
++    palette: &Palette,
++    content_width: u16,
++) -> Vec<MobileItem> {
++    let mut items = Vec::new();
+     if let Some(workspace_id) = snapshot.focused_workspace_id.as_deref() {
+         items.push(MobileItem::section("tabs", palette));
+         items.push(MobileItem::action(
+@@ -917,20 +996,6 @@ fn mobile_items(
+         }
+     }
+ 
+-    items.push(MobileItem::section("menu", palette));
+-    for (index, (label, _)) in super::global_menu::global_menu_items(snapshot)
+-        .into_iter()
+-        .enumerate()
+-    {
+-        items.push(MobileItem {
+-            lines: vec![Line::from(Span::styled(
+-                format!("  {label}"),
+-                Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+-            ))],
+-            background: palette.panel_bg,
+-            target: Some(ClientMobileTarget::Menu(index)),
+-        });
+-    }
+     items
+ }
+ 
+@@ -956,6 +1021,7 @@ impl ClientShellState {
+                 && super::contains(self.hits.mobile_switch, point)
+             {
+                 self.mobile_switcher_scroll = 0;
++                self.mobile_show_more = false;
+                 self.reveal_mobile_workspace = false;
+                 self.mode = ClientShellMode::Navigate;
+                 self.navigate_workspace_id = self.focused_navigation_target();
+@@ -996,6 +1062,14 @@ impl ClientShellState {
+             .find(|(rect, _)| super::contains(*rect, point))
+             .map(|(_, target)| target.clone());
+         match target {
++            Some(ClientMobileTarget::More) => {
++                self.mobile_show_more = !self.mobile_show_more;
++                self.mobile_switcher_scroll = 0;
++                self.reveal_mobile_workspace = false;
++            }
++            Some(ClientMobileTarget::ToggleExplorer) => {
++                self.toggle_explorer(outcome);
++            }
+             Some(ClientMobileTarget::Machine(endpoint_id)) => {
+                 if endpoint_id == self.active_endpoint_id {
+                     self.mode = ClientShellMode::Terminal;
+diff --git a/src/client/shell/state.rs b/src/client/shell/state.rs
+index 901c5a2..887eb87 100644
+--- a/src/client/shell/state.rs
++++ b/src/client/shell/state.rs
+@@ -79,6 +79,8 @@ pub(super) enum ClientMobileTarget {
+         pane_id: String,
+     },
+     Menu(usize),
++    More,
++    ToggleExplorer,
+ }
+ 
+ #[derive(Default)]
+@@ -863,6 +865,7 @@ pub(crate) struct ClientShellState {
+     pub(super) agent_scroll: usize,
+     pub(super) tab_scroll: usize,
+     pub(super) mobile_switcher_scroll: usize,
++    pub(super) mobile_show_more: bool,
+     pub(super) reveal_focused_workspace: bool,
+     pub(super) reveal_mobile_workspace: bool,
+     pub(super) mobile_switcher_suspended: bool,
+@@ -1025,6 +1028,7 @@ impl ClientShellState {
+             agent_scroll: 0,
+             tab_scroll: 0,
+             mobile_switcher_scroll: 0,
++            mobile_show_more: false,
+             reveal_focused_workspace: true,
+             reveal_mobile_workspace: false,
+             mobile_switcher_suspended: false,
+@@ -1209,6 +1213,7 @@ impl ClientShellState {
+         self.agent_scroll = 0;
+         self.tab_scroll = 0;
+         self.mobile_switcher_scroll = 0;
++        self.mobile_show_more = false;
+         self.reveal_focused_workspace = true;
+         self.reveal_mobile_workspace = false;
+         self.mobile_switcher_suspended = false;
+diff --git a/src/client/shell/tests/endpoints.rs b/src/client/shell/tests/endpoints.rs
+index 846806f..4750b4e 100644
+--- a/src/client/shell/tests/endpoints.rs
++++ b/src/client/shell/tests/endpoints.rs
+@@ -2138,6 +2138,7 @@ fn mobile_foreign_agent_and_workspace_targets_activate_their_endpoint() {
+     ));
+ 
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     state.compose(44, 30).expect("mobile switcher");
+     let remote_workspace = state
+         .hits
+@@ -2227,6 +2228,7 @@ fn cached_offline_navigator_and_mobile_targets_are_dimmed_and_disabled() {
+ 
+     state.overlay = None;
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     let frame = state.compose(44, 30).expect("offline mobile switcher");
+     let mobile_target = state
+         .hits
+diff --git a/src/client/shell/tests/mobile.rs b/src/client/shell/tests/mobile.rs
+index 4dac549..c974396 100644
+--- a/src/client/shell/tests/mobile.rs
++++ b/src/client/shell/tests/mobile.rs
+@@ -1,5 +1,256 @@
+ use super::*;
+ 
++#[test]
++fn mobile_tabs_first_more_click_expands_and_collapses_without_changing_focus() {
++    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
++    state.set_snapshot(Box::new(snapshot()));
++    state.set_pane_surface(surface());
++    state.mode = ClientShellMode::Navigate;
++    state.navigate_workspace_id = state.focused_navigation_target();
++    let selection = state.navigate_workspace_id.clone();
++    for expanded in [false, true, false] {
++        let frame = state.compose(44, 30).expect("mobile switcher");
++        let text = frame_rows(&frame).join("\n");
++        assert!(text.contains(if expanded { "More [-]" } else { "More [+]" }));
++        assert_eq!(text.contains("spaces"), expanded);
++        assert_eq!(text.contains("menu"), expanded);
++        assert!(text.find("tabs").unwrap() < text.find("More").unwrap());
++        assert_eq!(state.mobile_show_more, expanded);
++        assert_eq!(state.navigate_workspace_id, selection);
++        let more = state
++            .hits
++            .mobile_targets
++            .iter()
++            .find_map(|(rect, target)| matches!(target, ClientMobileTarget::More).then_some(*rect))
++            .expect("More toggle");
++        let outcome = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
++            kind: MouseEventKind::Down(MouseButton::Left),
++            column: more.x,
++            row: more.y,
++            modifiers: KeyModifiers::empty(),
++        })]);
++        assert!(outcome.repaint);
++        assert!(outcome.actions.is_empty());
++        assert_eq!(state.mode, ClientShellMode::Navigate);
++    }
++}
++
++#[test]
++fn mobile_toggle_explorer_requires_advertised_plugin_description_and_uses_opaque_id() {
++    use crate::protocol::{ClientShellCommand, ClientShellCommandAction};
++    for (action, description, available) in [
++        (ClientShellCommandAction::PluginAction, None, false),
++        (
++            ClientShellCommandAction::PluginAction,
++            Some("toggle explorer"),
++            false,
++        ),
++        (
++            ClientShellCommandAction::Shell,
++            Some("Toggle Explorer"),
++            false,
++        ),
++        (
++            ClientShellCommandAction::PluginAction,
++            Some("Toggle Explorer"),
++            true,
++        ),
++    ] {
++        let mut projected = snapshot();
++        projected.commands.push(ClientShellCommand {
++            command_id: "cmd_custom_arbitrary_42".into(),
++            binding_label: "prefix+shift+e".into(),
++            binding_labels: vec!["prefix+shift+e".into()],
++            action,
++            description: description.map(str::to_owned),
++        });
++        let menu = super::super::global_menu::global_menu_items(&projected);
++        let menu_index = menu
++            .iter()
++            .position(|(label, _)| *label == "Toggle Explorer");
++        assert_eq!(menu_index.is_some(), available);
++        let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
++        state.set_snapshot(Box::new(projected));
++        state.set_pane_surface(surface());
++        state.mode = ClientShellMode::Navigate;
++        state.navigate_workspace_id = state.focused_navigation_target();
++        let frame = state.compose(44, 30).expect("mobile switcher");
++        assert_eq!(
++            frame_rows(&frame).join("\n").contains("Toggle Explorer"),
++            available
++        );
++        let target = state.hits.mobile_targets.iter().find_map(|(rect, target)| {
++            matches!(target, ClientMobileTarget::ToggleExplorer).then_some(*rect)
++        });
++        assert_eq!(target.is_some(), available);
++        let mut outcome = ClientShellInput::default();
++        if let Some(target) = target {
++            outcome = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
++                kind: MouseEventKind::Down(MouseButton::Left),
++                column: target.x,
++                row: target.y,
++                modifiers: KeyModifiers::empty(),
++            })]);
++        } else {
++            state.toggle_explorer(&mut outcome);
++            assert!(outcome.actions.is_empty());
++            assert_eq!(state.mode, ClientShellMode::Navigate);
++            continue;
++        }
++        for invocation in 0..2 {
++            let [ClientShellAction::Endpoint {
++                endpoint_id,
++                request,
++                ..
++            }] = outcome.actions.as_slice()
++            else {
++                panic!("expected one endpoint command");
++            };
++            assert!(endpoint_id.is_local());
++            let crate::api::schema::Method::CommandInvoke(params) = &request.method else {
++                panic!("expected command.invoke");
++            };
++            assert_eq!(params.command_id, "cmd_custom_arbitrary_42");
++            assert_eq!(params.workspace_id.as_deref(), Some("ws_1"));
++            assert_eq!(params.tab_id.as_deref(), Some("tab_1"));
++            assert_eq!(params.pane_id.as_deref(), Some("pane_1"));
++            assert_eq!(state.mode, ClientShellMode::Terminal);
++            assert!(state.navigate_workspace_id.is_none());
++            if invocation == 0 {
++                outcome = ClientShellInput::default();
++                state.activate_global_menu_item(menu_index.unwrap(), &mut outcome);
++            }
++        }
++    }
++}
++
++#[test]
++fn mobile_collapsed_switcher_selects_tab_in_focused_workspace() {
++    let mut projected = snapshot();
++    let mut second = projected.tabs[0].clone();
++    second.tab_id = "tab_2".into();
++    second.label = "logs".into();
++    second.custom_label = true;
++    second.focused = false;
++    projected.tabs.push(second.clone());
++    second.tab_id = "tab_background".into();
++    second.workspace_id = "ws_other".into();
++    projected.tabs.push(second);
++    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
++    state.set_snapshot(Box::new(projected));
++    state.set_pane_surface(surface());
++    state.mode = ClientShellMode::Navigate;
++    state.compose(44, 20).expect("collapsed tab switcher");
++    assert!(!state.mobile_show_more);
++    assert!(!state.hits.mobile_targets.iter().any(|(_, target)| {
++        matches!(target, ClientMobileTarget::Tab { tab_id, .. } if tab_id == "tab_background")
++    }));
++    let tab = state
++        .hits
++        .mobile_targets
++        .iter()
++        .find_map(|(rect, target)| {
++            matches!(target, ClientMobileTarget::Tab { tab_id, .. } if tab_id == "tab_2")
++                .then_some(*rect)
++        })
++        .expect("second tab");
++    let outcome = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
++        kind: MouseEventKind::Down(MouseButton::Left),
++        column: tab.x,
++        row: tab.y,
++        modifiers: KeyModifiers::empty(),
++    })]);
++    assert_eq!(state.mode, ClientShellMode::Terminal);
++    assert!(outcome.actions.iter().any(|action| matches!(action,
++        ClientShellAction::Endpoint { endpoint_id, request, .. }
++            if endpoint_id.is_local() && matches!(&request.method,
++                crate::api::schema::Method::TabFocus(params) if params.tab_id == "tab_2")
++    )));
++}
++
++#[test]
++fn mobile_disconnected_agents_stay_behind_more_regardless_of_cached_status() {
++    for status in [
++        AgentStatus::Blocked,
++        AgentStatus::Working,
++        AgentStatus::Done,
++    ] {
++        let mut remote = snapshot();
++        remote.agents.push(ClientShellAgent {
++            pane_id: "pane_stale".into(),
++            workspace_id: "ws_1".into(),
++            tab_id: "tab_1".into(),
++            name: Some("pi".into()),
++            display_agent: None,
++            agent: Some("pi".into()),
++            title: None,
++            terminal_title: None,
++            terminal_title_stripped: None,
++            agent_status: status,
++            state_change_seq: 1,
++            state_labels: Vec::new(),
++            tokens: Vec::new(),
++            focused: false,
++        });
++        let profile =
++            crate::client::endpoint::SavedSshEndpoint::new("Build", "build", "agents").unwrap();
++        let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
++        let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
++        state.set_endpoint_catalog(&[profile]);
++        state.set_snapshot(Box::new(snapshot()));
++        state.set_pane_surface(surface());
++        state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
++        state.set_endpoint_snapshot(&endpoint_id, Box::new(remote.clone()));
++        remote.revision += 1;
++        remote.agents[0].state_change_seq += 1;
++        state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
++        state.mode = ClientShellMode::Navigate;
++        for (online, more, visible) in [
++            (true, false, true),
++            (false, false, false),
++            (false, true, true),
++        ] {
++            if !online {
++                state.mark_endpoint_disconnected(&endpoint_id);
++            }
++            state.mobile_show_more = more;
++            let frame = state.compose(44, 40).expect("agent switcher");
++            assert_eq!(state.hits.mobile_targets.iter().any(|(_, target)| {
++                matches!(target, ClientMobileTarget::Agent { pane_id, .. } if pane_id == "pane_stale")
++            }), visible, "{status:?} online={online} more={more}");
++            if !online && !more {
++                assert!(!frame_rows(&frame).join("\n").contains("agents"));
++            }
++        }
++    }
++}
++
++#[test]
++fn mobile_keyboard_workspace_navigation_expands_more_and_reveals_selection() {
++    let mut projected = snapshot();
++    let mut workspace = projected.workspaces[0].clone();
++    workspace.workspace_id = "ws_2".into();
++    workspace.focused = false;
++    projected.workspaces.push(workspace);
++    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
++    state.set_snapshot(Box::new(projected));
++    state.set_pane_surface(surface());
++    state.mode = ClientShellMode::Navigate;
++    state.navigate_workspace_id = state.focused_navigation_target();
++    state.compose(44, 10).expect("collapsed switcher");
++    assert!(!state.mobile_show_more);
++    state.handle_raw_events(vec![RawInputEvent::Key(crate::input::TerminalKey::new(
++        KeyCode::Down,
++        KeyModifiers::empty(),
++    ))]);
++    assert!(state.mobile_show_more);
++    state.compose(44, 10).expect("revealed workspace");
++    assert!(state.hits.mobile_targets.iter().any(|(_, target)| {
++        matches!(target, ClientMobileTarget::Workspace { workspace_id, .. } if workspace_id == "ws_2")
++    }));
++    assert!(state.mobile_switcher_scroll > 0);
++}
++
+ #[test]
+ fn navigate_update_status_uses_released_desktop_and_mobile_placement() {
+     let mut config = ClientShellConfig::from_config(&Config::default());
+@@ -47,6 +298,7 @@ fn navigate_update_status_uses_released_desktop_and_mobile_placement() {
+     let top = state.compose(106, 30).expect("top-tab update shell");
+     assert!(row_text(&top, 29).contains("update ready"));
+ 
++    state.mobile_show_more = true;
+     let mobile = state.compose(44, 30).expect("mobile update shell");
+     let mobile_text = mobile
+         .cells
+@@ -89,6 +341,7 @@ fn mobile_switcher_can_activate_an_online_saved_machine() {
+     state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
+     state.mode = ClientShellMode::Navigate;
+ 
++    state.mobile_show_more = true;
+     let frame = state.compose(44, 30).expect("mobile machine switcher");
+     let text = frame
+         .cells
+@@ -152,6 +405,7 @@ fn mobile_switcher_can_activate_an_online_saved_machine() {
+     state.mark_endpoint_disconnected(&endpoint_id);
+     state.receive_endpoint_unavailable("network lost".into());
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     let stale = state.compose(44, 30).expect("stale mobile switcher");
+     let text = stale
+         .cells
+@@ -250,20 +504,22 @@ fn mobile_header_and_switcher_render_released_sections_and_stable_targets() {
+         !switcher_text.contains('X'),
+         "switcher must clear the pane surface"
+     );
+-    for expected in [
+-        "switch",
+-        "close",
+-        "agents",
+-        "spaces",
+-        "+ new workspace",
+-        "tabs",
+-        "+ new tab",
+-        "menu",
+-        "settings",
+-        "detach",
+-    ] {
++    for expected in ["switch", "close", "agents", "tabs", "+ new tab", "More [+]"] {
+         assert!(switcher_text.contains(expected), "missing {expected}");
+     }
++    assert!(!switcher_text.contains("spaces"));
++    assert!(!switcher_text.contains("menu"));
++    let more = state
++        .hits
++        .mobile_targets
++        .iter()
++        .find_map(|(rect, target)| matches!(target, ClientMobileTarget::More).then_some(*rect))
++        .expect("More toggle");
++    let expanded = state.handle_raw_events(vec![click(more)]);
++    assert!(expanded.actions.is_empty());
++    assert!(state.mobile_show_more);
++    assert_eq!(state.mode, ClientShellMode::Navigate);
++    state.compose(44, 30).expect("expanded switcher");
+     let workspace_hit = state
+         .hits
+         .mobile_targets
+@@ -389,6 +645,7 @@ fn mobile_background_workspace_uses_its_own_active_tab_status() {
+     state.set_pane_surface(surface());
+     state.mode = ClientShellMode::Navigate;
+     state.navigate_workspace_id = state.navigation_target(&ClientEndpointId::Local, "ws_2");
++    state.mobile_show_more = true;
+     let frame = state.compose(44, 20).expect("mobile switcher");
+     let text = frame
+         .cells
+@@ -446,6 +703,7 @@ fn mobile_switcher_create_and_menu_rows_reuse_client_actions() {
+     assert_eq!(state.mode, ClientShellMode::Terminal);
+ 
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     state.compose(44, 20).expect("mobile workspace switcher");
+     let new_workspace = state
+         .hits
+@@ -471,6 +729,7 @@ fn mobile_switcher_create_and_menu_rows_reuse_client_actions() {
+     assert_eq!(state.mode, ClientShellMode::Terminal);
+ 
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     state.compose(44, 20).expect("mobile menu switcher");
+     let settings = state
+         .hits
+@@ -503,6 +762,7 @@ fn mobile_menu_keeps_inert_notes_open_and_cancel_without_workspace_in_navigate()
+     state.set_snapshot(Box::new(projected));
+     state.set_pane_surface(surface());
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     state.compose(44, 20).expect("mobile switcher");
+     let inert_notes = state
+         .hits
+@@ -531,6 +791,7 @@ fn mobile_menu_keeps_inert_notes_open_and_cancel_without_workspace_in_navigate()
+     state.set_snapshot(Box::new(empty));
+     state.set_pane_surface(surface());
+     state.mode = ClientShellMode::Navigate;
++    state.mobile_show_more = true;
+     state.compose(44, 20).expect("empty mobile switcher");
+     let new_workspace = state
+         .hits
+@@ -623,6 +884,19 @@ fn mobile_switcher_scroll_close_and_width_transition_clear_mobile_hits() {
+         modifiers: KeyModifiers::empty(),
+     })]);
+     state.compose(44, 10).expect("mobile switcher");
++    let more = state
++        .hits
++        .mobile_targets
++        .iter()
++        .find_map(|(rect, target)| matches!(target, ClientMobileTarget::More).then_some(*rect))
++        .unwrap();
++    state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
++        kind: MouseEventKind::Down(MouseButton::Left),
++        column: more.x,
++        row: more.y,
++        modifiers: KeyModifiers::empty(),
++    })]);
++    state.compose(44, 10).expect("expanded mobile switcher");
+     let wheel = state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+         kind: MouseEventKind::ScrollDown,
+         column: 20,
+diff --git a/src/client/shell/workspace_navigation.rs b/src/client/shell/workspace_navigation.rs
+index 6139fe0..277e6e2 100644
+--- a/src/client/shell/workspace_navigation.rs
++++ b/src/client/shell/workspace_navigation.rs
+@@ -122,6 +122,9 @@ impl ClientShellState {
+             self.reveal_workspace(&target.workspace_id);
+         }
+         self.navigate_workspace_id = Some(target);
++        if mobile {
++            self.mobile_show_more = true;
++        }
+         self.reveal_mobile_workspace = mobile;
+         self.reveal_navigation_workspace =
+             !mobile || self.snapshot.is_none() || self.pane_surface.is_none();
+diff --git a/src/config.rs b/src/config.rs
+index 60a22a1..1d968cb 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -51,7 +51,10 @@ pub(crate) use self::{
+     window_title::{sanitize_window_title_text, window_title_diagnostics},
+ };
+ 
+-pub(crate) use self::{keybinds::CommandKeybindType, model::KeysConfig};
++pub(crate) use self::{
++    keybinds::CommandKeybindType,
++    model::{KeysConfig, RemoteConfig},
++};
+ 
+ pub const CONFIG_PATH_ENV_VAR: &str = "HERDR_CONFIG_PATH";
+ 
+diff --git a/src/config/model.rs b/src/config/model.rs
+index 6ef6274..c003fbf 100644
+--- a/src/config/model.rs
++++ b/src/config/model.rs
+@@ -1017,18 +1017,21 @@ pub struct AdvancedConfig {
+     pub scrollback_limit_bytes: usize,
+ }
+ 
+-#[derive(Debug, Deserialize)]
++#[derive(Debug, Clone, Deserialize)]
+ #[serde(default)]
+ pub struct RemoteConfig {
+     /// Add keepalive fallbacks and private connection reuse for `herdr --remote`.
+     /// Set false to run plain ssh unchanged. Default: true.
+     pub manage_ssh_config: bool,
++    /// Saved SSH labels or targets treated as Local on the named hostname.
++    pub local_machine_aliases: std::collections::BTreeMap<String, Vec<String>>,
+ }
+ 
+ impl Default for RemoteConfig {
+     fn default() -> Self {
+         Self {
+             manage_ssh_config: true,
++            local_machine_aliases: Default::default(),
+         }
+     }
+ }

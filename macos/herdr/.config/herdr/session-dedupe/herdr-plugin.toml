@@ -1,8 +1,8 @@
 id = "session-dedupe"
 name = "Agent Session Dedupe"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.9.0"
-description = "Keeps each agent session in one pane. When a second pane opens a session that is already live, focus moves to the original tab and the idle duplicate closes after a grace period. Busy panes are never closed."
+description = "Closes idle duplicate opencode session panes after a grace period without issuing shared focus commands. Busy and unknown-status panes are never closed."
 platforms = ["macos", "linux"]
 
 [[startup]]

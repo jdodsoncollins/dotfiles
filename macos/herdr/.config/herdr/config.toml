@@ -10,6 +10,7 @@ selection_bg = "#3d59a1"
 accent = "#7aa2f7"
 
 [ui]
+sidebar_collapsed_mode = "compact"
 sidebar_width = 32
 sidebar_min_width = 26
 sidebar_max_width = 42
@@ -45,3 +46,12 @@ key = "prefix+shift+o"
 type = "plugin_action"
 command = "last-reply.new-opencode-tab"
 description = "new tab running opencode"
+
+[[keys.command]]
+key = "prefix+shift+e"
+type = "plugin_action"
+command = "herdr-sidebar.open-sidebar"
+description = "Toggle Explorer"
+
+[remote.local_machine_aliases]
+"Jeremy-RK2MN2" = ["rk2mn2", "jeremy-rk2mn2"]

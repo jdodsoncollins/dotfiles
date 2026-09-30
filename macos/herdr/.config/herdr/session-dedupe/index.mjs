@@ -11,6 +11,7 @@ const ownersFile = path.join(stateDir, "owners.json")
 const GRACE_MS = 15000
 const PENDING_TTL_MS = 60000
 const BUSY = new Set(["working", "blocked"])
+const CLOSEABLE = new Set(["idle", "done"])
 
 const run = async (args) => {
   try {
@@ -31,7 +32,7 @@ const listPanes = async () => {
   }
 }
 
-const sessionOf = (p) => (p.agent ? p.agent_session?.value : undefined)
+const sessionOf = (p) => (p.agent === "opencode" ? p.agent_session?.value : undefined)
 
 const idOrder = (id) => parseInt(String(id).split(":p").pop(), 36) || 0
 
@@ -42,6 +43,12 @@ const readOwners = () => {
     return {}
   }
 }
+
+const orderGroup = (group, owners) => [...group].sort((a, b) => {
+  const busy = Number(BUSY.has(b.agent_status)) - Number(BUSY.has(a.agent_status))
+  return busy || (owners[a.pane_id]?.since ?? Infinity) - (owners[b.pane_id]?.since ?? Infinity)
+    || idOrder(a.pane_id) - idOrder(b.pane_id)
+})
 
 const writeOwners = (owners) => {
   try {
@@ -95,30 +102,9 @@ const scan = async () => {
 
   for (const [session, group] of groups) {
     if (group.length < 2) continue
-    const rank = (p) => [
-      BUSY.has(p.agent_status) ? 0 : 1,
-      owners[p.pane_id]?.since ?? now,
-      idOrder(p.pane_id),
-    ]
-    const sorted = [...group].sort((a, b) => {
-      const ra = rank(a)
-      const rb = rank(b)
-      for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] - rb[i]
-      return 0
-    })
-    const keeper = sorted[0]
+    const sorted = orderGroup(group, owners)
     for (const dup of sorted.slice(1)) {
-      if (BUSY.has(dup.agent_status)) continue
-      if (dup.focused && dup.tab_id !== keeper.tab_id) {
-        await run(["tab", "focus", keeper.tab_id])
-        await run([
-          "notification",
-          "show",
-          "Session already open",
-          "--body",
-          `Moved to the existing tab. The duplicate pane closes in ${GRACE_MS / 1000}s.`,
-        ])
-      }
+      if (!CLOSEABLE.has(dup.agent_status)) continue
       if (!claimPending(dup.pane_id)) continue
       const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "close", dup.pane_id, session], {
         detached: true,
@@ -136,8 +122,9 @@ const closeDuplicate = async (paneId, session) => {
     const panes = await listPanes()
     if (!panes) return
     const dup = panes.find((p) => p.pane_id === paneId)
-    if (!dup || sessionOf(dup) !== session || BUSY.has(dup.agent_status)) return
-    if (!panes.some((p) => p.pane_id !== paneId && sessionOf(p) === session)) return
+    if (!dup || sessionOf(dup) !== session || !CLOSEABLE.has(dup.agent_status)) return
+    const group = orderGroup(panes.filter((p) => sessionOf(p) === session), readOwners())
+    if (group.length < 2 || group[0].pane_id === paneId) return
     const tabId = dup.tab_id
     await run(["pane", "close", paneId])
     const after = await listPanes()

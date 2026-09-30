@@ -90,12 +90,13 @@ changes, update the other to match.
 - No duplicate session panes: herdr 0.9.1 has no dedupe setting, so the local
   `session-dedupe` plugin (`~/.config/herdr/session-dedupe`, linked with
   `herdr plugin link ~/Projects/dotfiles/macos/herdr/.config/herdr/session-dedupe`)
-  enforces one pane per agent session. The pane that is busy, or else the one
-  that opened the session first, is kept. If you open a session that is already
-  live, focus jumps to the existing tab, and the idle duplicate closes after
+  removes idle duplicate OpenCode session panes. The pane that is busy, or else
+  the one that opened the session first, is kept. The idle duplicate closes after
   15s (the grace period lets `session-tabs` finish spawning the session you
   left). Its tab closes too if only the herdr-sidebar dock remains. Busy panes
-  are never closed. Hook events do not fire on session switches, so
+  and unknown-status panes are never closed. It rechecks ownership before
+  closing and never issues focus commands that would redirect other clients.
+  Hook events do not fire on session switches, so
   `session-tabs` calls the plugin's `scan` action after each `/sessions` pick.
 - The `last-reply` plugin reports sidebar metadata only: the `$last_reply`
   time (updated on agent status changes), each pane's Git branch and
@@ -116,8 +117,14 @@ changes, update the other to match.
 - `herdr-sidebar` (third-party, installed with
   `herdr plugin install alexarthurs/herdr-sidebar/plugins/herdr-sidebar`) docks
   a VS Code-style Explorer / Search / Source Control pane next to the active
-  pane. Toggle with `herdr plugin action invoke herdr-sidebar.open-sidebar`;
+  pane. Auto-open is disabled. Apply the saved policy after installation with
+  `node macos/herdr/sidebar-defaults.mjs`; this preserves other plugin settings.
+  The policy lives in the plugin's runtime `state.json`, not Herdr's TOML.
+  Toggle with `prefix+shift+e` or
+  `herdr plugin action invoke herdr-sidebar.open-sidebar`;
   inside it, `1`/`2`/`3` switch views, `s` opens settings, `b` hides it.
+  The patched client also exposes a clickable **Toggle Explorer** item in the
+  mobile switcher and desktop menu. See [mobile client setup](herdr-client/README.md).
 - `eliasstravik/herdr-agent-progress` (third-party) adds an
   `$agent_progress_summary` sidebar row with each agent's self-reported task
   estimate and current activity. Reporting adapters exist for Claude Code
