@@ -1,15 +1,14 @@
 diff --git a/docs/next/website/src/content/docs/configuration.mdx b/docs/next/website/src/content/docs/configuration.mdx
-index 1975a43..2e64ffd 100644
+index 1975a43..ccbd20e 100644
 --- a/docs/next/website/src/content/docs/configuration.mdx
 +++ b/docs/next/website/src/content/docs/configuration.mdx
-@@ -121,6 +121,16 @@ manage_ssh_config = true
+@@ -121,6 +121,15 @@ manage_ssh_config = true
  
  When enabled, `herdr --remote` writes a private temporary SSH config that includes your user and system SSH configs first, then adds fallback `ServerAliveInterval` and `ServerAliveCountMax` values. Your own keepalive settings win. Linux and macOS clients also use a private per-attach OpenSSH control socket to reuse the first authenticated connection; Windows OpenSSH does not. Set `manage_ssh_config = false` to run remote attach through plain `ssh` without Herdr's generated config or control socket.
  
-+Saved machines that point back to the local host can be hidden from the client's machine list:
++Saved machines that point back to the local host can be hidden from the client's machine list. Put this client-only mapping in `local-machine-aliases.toml` next to the resolved `config.toml`, not inside the shared config:
 +
 +```toml
-+[remote.local_machine_aliases]
 +"my-laptop" = ["laptop", "my-laptop"]
 +"my-desktop" = ["desktop"]
 +```
@@ -19,7 +18,7 @@ index 1975a43..2e64ffd 100644
  ## Keybindings
  
  For a guided introduction to the prefix and a vetted prefix-free setup, see [Keyboard](/docs/keyboard/).
-@@ -233,6 +243,18 @@ description = "apply layout"
+@@ -233,6 +242,18 @@ description = "apply layout"
  
  `description` is optional. When set, it appears in the keybind help panel (opened with `prefix+?`) instead of the default `'custom command'` label.
  
@@ -61,9 +60,15 @@ index a20b74d..4268202 100644
                  previous = Some(current.clone());
                  if event_tx
 diff --git a/src/client/endpoint/catalog.rs b/src/client/endpoint/catalog.rs
-index 23f2638..389826d 100644
+index 23f2638..a7f5fcf 100644
 --- a/src/client/endpoint/catalog.rs
 +++ b/src/client/endpoint/catalog.rs
+@@ -1,4 +1,4 @@
+-use std::collections::HashSet;
++use std::collections::{BTreeMap, HashSet};
+ use std::io::{self, Read as _, Write as _};
+ use std::path::{Path, PathBuf};
+ use std::sync::atomic::{AtomicU64, Ordering};
 @@ -226,6 +226,22 @@ impl EndpointCatalog {
          self.ssh.iter().any(|profile| profile.enabled)
      }
@@ -87,10 +92,28 @@ index 23f2638..389826d 100644
      pub(crate) fn contains_enabled_target_session(&self, target: &str, session: &str) -> bool {
          self.ssh.iter().any(|profile| {
              profile.enabled && profile.target == target && profile.session == session
-@@ -366,6 +382,26 @@ fn store_private_json(path: &Path, content: &[u8], description: &str) -> Result<
+@@ -366,6 +382,44 @@ fn store_private_json(path: &Path, content: &[u8], description: &str) -> Result<
          .map_err(|error| format!("failed to persist {description} directory: {error}"))
  }
  
++pub(crate) fn load_local_machine_aliases(
++    config_path: &Path,
++) -> Result<BTreeMap<String, Vec<String>>, String> {
++    let path = config_path.with_file_name("local-machine-aliases.toml");
++    let content = match std::fs::read_to_string(&path) {
++        Ok(content) => content,
++        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
++        Err(error) => {
++            return Err(format!(
++                "failed to read local machine aliases {}: {error}",
++                path.display()
++            ))
++        }
++    };
++    toml::from_str(&content)
++        .map_err(|error| format!("invalid local machine aliases {}: {error}", path.display()))
++}
++
 +pub(crate) fn profiles_for_local_machine(
 +    profiles: &[SavedSshEndpoint],
 +    remote: &crate::config::RemoteConfig,
@@ -114,15 +137,59 @@ index 23f2638..389826d 100644
  pub(crate) fn catalog_path() -> PathBuf {
      crate::config::state_dir()
          .join("client")
-@@ -391,6 +427,83 @@ mod tests {
+@@ -391,6 +445,128 @@ mod tests {
              .join("endpoints.json")
      }
  
 +    #[test]
++    fn local_machine_aliases_load_raw_map_without_mutating_sources() {
++        let catalog_path = path("local-machine-aliases-sidecar");
++        std::fs::create_dir_all(catalog_path.parent().unwrap()).unwrap();
++        let config_path = catalog_path.with_file_name("custom-config.toml");
++        let aliases_path = config_path.with_file_name("local-machine-aliases.toml");
++        let config = "[remote]\nmanage_ssh_config = false\n";
++        let aliases = "\"Jeremy-RK2MN2\" = [\"rk2mn2\", \"jeremy-rk2mn2\"]\n";
++        std::fs::write(&config_path, config).unwrap();
++        std::fs::write(&aliases_path, aliases).unwrap();
++        EndpointCatalog::default()
++            .store_to_path(&catalog_path)
++            .unwrap();
++        let saved_catalog = std::fs::read(&catalog_path).unwrap();
++
++        let loaded = load_local_machine_aliases(&config_path).unwrap();
++        assert_eq!(loaded.len(), 1);
++        assert_eq!(loaded["Jeremy-RK2MN2"], ["rk2mn2", "jeremy-rk2mn2"]);
++        assert_eq!(std::fs::read_to_string(&config_path).unwrap(), config);
++        assert_eq!(std::fs::read_to_string(&aliases_path).unwrap(), aliases);
++        assert_eq!(std::fs::read(&catalog_path).unwrap(), saved_catalog);
++        std::fs::remove_dir_all(catalog_path.parent().unwrap()).unwrap();
++    }
++
++    #[test]
++    fn local_machine_aliases_missing_sidecar_returns_empty_without_creating_files() {
++        let config_path = path("local-machine-aliases-missing");
++        assert!(!config_path.parent().unwrap().exists());
++        assert!(load_local_machine_aliases(&config_path).unwrap().is_empty());
++        assert!(!config_path.parent().unwrap().exists());
++    }
++
++    #[test]
++    fn local_machine_aliases_invalid_sidecar_returns_parse_error() {
++        let config_path = path("local-machine-aliases-invalid");
++        std::fs::create_dir_all(config_path.parent().unwrap()).unwrap();
++        let aliases_path = config_path.with_file_name("local-machine-aliases.toml");
++        std::fs::write(&aliases_path, "Jeremy-RK2MN2 = 42").unwrap();
++        let error = load_local_machine_aliases(&config_path).unwrap_err();
++        assert!(error.contains("invalid local machine aliases"));
++        assert!(error.contains(&aliases_path.display().to_string()));
++        std::fs::remove_dir_all(config_path.parent().unwrap()).unwrap();
++    }
++
++    #[test]
 +    fn local_machine_aliases_filter_runtime_view_without_changing_saved_profiles() {
-+        let config: crate::config::Config = toml::from_str(
++        let mut config = crate::config::Config::default();
++        config.remote.local_machine_aliases = toml::from_str(
 +            r#"
-+[remote.local_machine_aliases]
 +Jeremy-RK2MN2 = ["rk2mn2", "jeremy-rk2mn2"]
 +build-host = ["build"]
 +"#,
@@ -177,8 +244,9 @@ index 23f2638..389826d 100644
 +        catalog
 +            .add_ssh("rk2mn2", "jeremy-rk2mn2", "default")
 +            .unwrap();
-+        let config: crate::config::Config =
-+            toml::from_str("[remote.local_machine_aliases]\nJeremy-RK2MN2 = [\"rk2mn2\"]").unwrap();
++        let mut config = crate::config::Config::default();
++        config.remote.local_machine_aliases =
++            toml::from_str("Jeremy-RK2MN2 = [\"rk2mn2\"]").unwrap();
 +        assert!(crate::config::Config::default()
 +            .remote
 +            .local_machine_aliases
@@ -209,18 +277,33 @@ index 53ef9f3..02a5c74 100644
 +    pub(super) remote_config: crate::config::RemoteConfig,
  }
 diff --git a/src/client/mod.rs b/src/client/mod.rs
-index cb46509..91b536d 100644
+index cb46509..29ac856 100644
 --- a/src/client/mod.rs
 +++ b/src/client/mod.rs
-@@ -193,6 +193,7 @@ fn run_client_with_mode(
+@@ -149,6 +149,14 @@ fn run_client_with_mode(
+     init_logging();
+ 
+     let loaded_config = crate::config::Config::load();
++    let mut remote_config = loaded_config.config.remote.clone();
++    remote_config.local_machine_aliases = endpoint::load_local_machine_aliases(
++        &crate::config::config_path(),
++    )
++    .unwrap_or_else(|error| {
++        warn!(%error, "local machine aliases are unavailable");
++        Default::default()
++    });
+     // Windows may not have virtual terminal processing enabled until the rendered
+     // client initializes the terminal, so defer the host mouse reset to
+     // `setup_terminal_with_capabilities` instead of emitting raw escapes early.
+@@ -193,6 +201,7 @@ fn run_client_with_mode(
          endpoint_keybindings,
          remote_image_paste_key,
          shell_config,
-+        remote_config: loaded_config.config.remote.clone(),
++        remote_config,
      };
  
      crate::logging::startup("client");
-@@ -206,6 +207,10 @@ fn run_client_with_mode(
+@@ -206,6 +215,10 @@ fn run_client_with_mode(
      } else {
          endpoint::EndpointCatalog::default()
      };
@@ -231,7 +314,7 @@ index cb46509..91b536d 100644
      let federated = endpoint_catalog.has_enabled_ssh();
  
      let initial_stream = match crate::ipc::connect_local_stream(&socket_path) {
-@@ -586,7 +591,7 @@ async fn run_client_loop(
+@@ -586,7 +599,7 @@ async fn run_client_loop(
      let mut scheduled_activation = None;
      let mut pending_catalog: Option<Result<Vec<endpoint::SavedSshEndpoint>, String>> = None;
      if state.shell.is_some() && !is_remote_client && state.attach_escape.is_none() {
@@ -1205,10 +1288,10 @@ index 60a22a1..1d968cb 100644
  pub const CONFIG_PATH_ENV_VAR: &str = "HERDR_CONFIG_PATH";
  
 diff --git a/src/config/model.rs b/src/config/model.rs
-index 6ef6274..c003fbf 100644
+index 6ef6274..20788b6 100644
 --- a/src/config/model.rs
 +++ b/src/config/model.rs
-@@ -1017,18 +1017,21 @@ pub struct AdvancedConfig {
+@@ -1017,18 +1017,22 @@ pub struct AdvancedConfig {
      pub scrollback_limit_bytes: usize,
  }
  
@@ -1220,6 +1303,7 @@ index 6ef6274..c003fbf 100644
      /// Set false to run plain ssh unchanged. Default: true.
      pub manage_ssh_config: bool,
 +    /// Saved SSH labels or targets treated as Local on the named hostname.
++    #[serde(skip)]
 +    pub local_machine_aliases: std::collections::BTreeMap<String, Vec<String>>,
  }
  

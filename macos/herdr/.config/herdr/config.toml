@@ -52,6 +52,3 @@ key = "prefix+shift+e"
 type = "plugin_action"
 command = "herdr-sidebar.open-sidebar"
 description = "Toggle Explorer"
-
-[remote.local_machine_aliases]
-"Jeremy-RK2MN2" = ["rk2mn2", "jeremy-rk2mn2"]

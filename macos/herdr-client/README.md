@@ -21,15 +21,23 @@ these features are not available in the stock binary.
 The stowed `macos/herdr/.config/herdr/config.toml` includes:
 
 ```toml
-[remote.local_machine_aliases]
-"Jeremy-RK2MN2" = ["rk2mn2", "jeremy-rk2mn2"]
-
 [[keys.command]]
 key = "prefix+shift+e"
 type = "plugin_action"
 command = "herdr-sidebar.open-sidebar"
 description = "Toggle Explorer"
 ```
+
+The stowed `~/.config/herdr/local-machine-aliases.toml` contains the client-only
+mapping:
+
+```toml
+"Jeremy-RK2MN2" = ["rk2mn2", "jeremy-rk2mn2"]
+```
+
+The patched client reads this file next to its resolved `config.toml`. The stock
+server does not read it, so shared config validation stays clean. Missing files
+mean no filtering; invalid files produce a warning in the client log.
 
 Hostname, saved profile label, and SSH target comparisons are case-insensitive
 and exact. No DNS lookup or Tailnet connection is needed to hide the self-profile.
@@ -67,10 +75,6 @@ server and agents are left alone. Detach and reattach desktop and Moshi clients
 to load the new client. The new client uses the existing protocol and existing
 server command interface. There are no server-side changes in this patch.
 
-The unchanged stock server reports `remote.local_machine_aliases` as an unknown
-key during reload and ignores it. This is expected: the patched client reads
-that setting on attach. The existing Explorer custom command still reloads.
-
 An upstream `herdr update` can replace the patched binary. Reapply this installer
 only to its pinned base; port the patch and rerun tests before changing versions.
 
@@ -87,7 +91,7 @@ cargo test --locked --manifest-path "$HOME/Projects/herdr/Cargo.toml" --bin herd
 node --test macos/tests/session-dedupe.test.mjs
 ```
 
-Verified: 19 mobile tests, 2 alias tests, 298 client-shell tests (2 manual profiling
+Verified: 19 mobile tests, 5 alias tests, 298 client-shell tests (2 manual profiling
 tests ignored), 2 catalog-watcher tests, and 6 dedupe safety tests. Release build
 passed on macOS ARM64. Phone touch behavior still needs a Moshi reattach and visual
 confirmation; the tests do not replace that check.
@@ -99,6 +103,6 @@ install -m 755 "$HOME/.local/bin/herdr-stock-0.9.1" "$HOME/.local/bin/herdr.roll
 mv "$HOME/.local/bin/herdr.rollback" "$HOME/.local/bin/herdr"
 ```
 
-Remove the `remote.local_machine_aliases` table when returning to stock, then
-reattach clients. The Explorer shortcut and disabled auto-open work with stock
-Herdr too. No server restart is needed.
+Reattach clients after restoring stock. Stock Herdr ignores the separate alias
+file. The Explorer shortcut and disabled auto-open work with stock Herdr too.
+No server restart is needed.
