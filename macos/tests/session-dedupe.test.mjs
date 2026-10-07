@@ -12,10 +12,10 @@ const plugin = fileURLToPath(new URL("../herdr/.config/herdr/session-dedupe/inde
 const session = "test-session"
 const pane = (id, status = "idle", agent = "opencode") => ({
   pane_id: id, tab_id: "w1:t1", agent, agent_status: status,
-  agent_session: { value: session }, focused: true,
+  agent_session: { value: session }, focused: false,
 })
 
-async function run(panes, args, markers = {}) {
+async function run(panes, args, markers = {}, inspectMarkers) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "session-dedupe-test-"))
   try {
     const mock = path.join(dir, "herdr")
@@ -36,8 +36,10 @@ if (args[0] === "pane" && args[1] === "list") {
     }))
     await fs.mkdir(spawns, { recursive: true })
     for (const [paneId, markerSession] of Object.entries(markers)) {
-      await fs.writeFile(path.join(spawns, `${markerSession}.json`),
-        JSON.stringify({ pane: paneId, session: markerSession, at: Date.now() }))
+      const marker = typeof markerSession === "string"
+        ? { pane: paneId, session: markerSession, at: Date.now() }
+        : { pane: paneId, ...markerSession }
+      await fs.writeFile(path.join(spawns, `${marker.session}.json`), JSON.stringify(marker))
     }
     await exec(process.execPath, [plugin, ...args], {
       env: { ...process.env, HERDR_BIN_PATH: mock, HERDR_PLUGIN_STATE_DIR: dir,
@@ -45,6 +47,7 @@ if (args[0] === "pane" && args[1] === "list") {
         TEST_PANES: JSON.stringify(panes), TEST_LOG: log }, timeout: 25000,
     })
     const calls = await fs.readFile(log, "utf8").catch(() => "")
+    if (inspectMarkers) await inspectMarkers(spawns)
     return calls.trim() ? calls.trim().split("\n").map(JSON.parse) : []
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
@@ -85,5 +88,32 @@ describe("session dedupe safety", { concurrency: true }, () => {
     assert.deepEqual(
       await run([pane("w1:p1"), pane("w1:p2")], ["close", "w1:p2", session], { "w1:p1": session }),
       [["pane", "close", "w1:p2"]])
+  })
+  it("keeps an idle duplicate that the user is viewing", async () => {
+    assert.deepEqual(await run([pane("w1:p1"), { ...pane("w1:p2"), focused: true }],
+      ["close", "w1:p2", session]), [])
+  })
+  it("keeps a marker while its pane is starting without a session report", async () => {
+    const starting = { pane_id: "w1:p2", agent_status: "unknown" }
+    await run([pane("w1:p1"), starting], [], { "w1:p2": session }, async (dir) => {
+      assert.equal(JSON.parse(await fs.readFile(path.join(dir, `${session}.json`))).pane, "w1:p2")
+    })
+  })
+  it("removes a marker when its pane has closed", async () => {
+    await run([pane("w1:p1")], [], { "w1:p2": session }, async (dir) => {
+      assert.deepEqual(await fs.readdir(dir), [])
+    })
+  })
+  it("removes a marker after its pane switches to another session", async () => {
+    await run([{ ...pane("w1:p2"), agent_session: { value: "other" } }], [],
+      { "w1:p2": session }, async (dir) => {
+        assert.deepEqual(await fs.readdir(dir), [])
+      })
+  })
+  it("expires a startup marker after its launch window", async () => {
+    await run([{ pane_id: "w1:p2", agent_status: "unknown" }], [],
+      { "w1:p2": { session, at: Date.now() - 120000 } }, async (dir) => {
+        assert.deepEqual(await fs.readdir(dir), [])
+      })
   })
 })

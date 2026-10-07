@@ -89,10 +89,12 @@ cargo test --locked --manifest-path "$HOME/Projects/herdr/Cargo.toml" mobile
 cargo test --locked --manifest-path "$HOME/Projects/herdr/Cargo.toml" local_machine_aliases
 cargo test --locked --manifest-path "$HOME/Projects/herdr/Cargo.toml" --bin herdr client::shell
 node --test macos/tests/session-dedupe.test.mjs
+node --test macos/tests/session-tabs.test.mjs
 ```
 
 Verified: 19 mobile tests, 5 alias tests, 298 client-shell tests (2 manual profiling
-tests ignored), 2 catalog-watcher tests, and 9 dedupe safety tests. Release build
+tests ignored), 2 catalog-watcher tests, 14 dedupe safety tests, and 9 session-tab
+lifecycle tests. Release build
 passed on macOS ARM64. Phone touch behavior still needs a Moshi reattach and visual
 confirmation; the tests do not replace that check.
 

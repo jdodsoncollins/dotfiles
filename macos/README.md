@@ -84,6 +84,20 @@ changes, update the other to match.
   panes need one restart; tabs it spawns load it automatically. Closing a
   tab never deletes the session. The same session can still be opened in
   two panes by hand; the plugin only guards its own spawns.
+- OpenCode sessions are durable; HerdR tabs are views of them:
+
+  | Action | Tab behavior | Session behavior |
+  | --- | --- | --- |
+  | `/new` inside a session | Current tab becomes the new-session composer; the previous session opens in a background tab if it has no other view | Previous session persists |
+  | `/sessions` opens a session from days ago | Selected session takes over the current tab; the departed session gets a background tab if needed | Selected session resumes its saved history |
+  | Close a tab or exit OpenCode | That view closes or returns to its shell | Session remains available through `/sessions` or `opencode --session <id>` |
+  | Open a child session | Current tab shows the child; no extra root-session tab opens | Child stays part of its root session |
+
+  Opening a session uses the tab you opened it in. Saved sessions without views
+  stay closed until you resume them. The plugin waits for session metadata to
+  load before deciding that you left a session, coalesces in-flight spawns, and
+  cancels pending work when the TUI closes. A closed view can be reopened on a
+  later departure without a cooldown.
 - `tui.jsonc` also lists herdr's `herdr-tui-session.js`. Reinstalling the
   herdr opencode integration rewrites that file and breaks the symlink;
   copy the live file back, re-add `./session-tabs.js`, and re-link.
@@ -94,14 +108,17 @@ changes, update the other to match.
   the one that opened the session first, is kept. The idle duplicate closes after
   15s (the grace period lets `session-tabs` finish spawning the session you
   left). Its tab closes too if only the herdr-sidebar dock remains. Busy panes
-  and unknown-status panes are never closed. It rechecks ownership before
+  and unknown-status panes are never closed. Focused panes are also protected,
+  including at the final recheck, so picking a session already open elsewhere
+  does not close the pane you are viewing. It rechecks ownership before
   closing and never issues focus commands that would redirect other clients.
   `session-tabs` marks every tab it spawns in
   `~/.config/herdr/session-tabs-spawns/<session>.json`, and a marked pane is
-  never closed as a duplicate: after `/new` the departed pane keeps reporting
-  the old session until there is activity in the new one, and leader election
-  would otherwise always favor that stale reporter and kill the fresh spawn.
-  Markers are pruned once the pane no longer hosts the session or after 24h.
+  protected from duplicate cleanup. A departed pane can still report the old
+  session during handoff; the marker protects the new view while reports catch
+  up. Scans retain a startup marker for up to 60s while its pane has no session
+  report. They prune it when its pane closes, reports another session, or exceeds
+  the startup window without reporting. Markers expire after 24h.
   Hook events do not fire on session switches, so
   `session-tabs` calls the plugin's `scan` action after each `/sessions` pick.
 - The `last-reply` plugin reports sidebar metadata only: the `$last_reply`

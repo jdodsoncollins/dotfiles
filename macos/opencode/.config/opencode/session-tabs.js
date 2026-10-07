@@ -25,12 +25,15 @@ export default {
     const pane = env.HERDR_PANE_ID
     const spawnsDir =
       env.HERDR_SPAWNS_DIR || path.join(env.HOME || "", ".config", "herdr", "session-tabs-spawns")
-    const spawned = new Map()
+    const spawning = new Set()
+    const scanTimers = new Set()
+    const controller = new AbortController()
     let selected
 
     const run = async (args, timeout = 20000) => {
+      if (controller.signal.aborted) return null
       try {
-        const { stdout } = await exec(herdr, args, { timeout })
+        const { stdout } = await exec(herdr, args, { timeout, signal: controller.signal })
         return stdout
       } catch {
         return null
@@ -60,6 +63,7 @@ export default {
 
     const current = () => {
       const route = api.route.current
+      if (route?.name === "home") return null
       const id = route?.name === "session" ? route.params?.sessionID : undefined
       return typeof id === "string" && id ? rootOf(id) : undefined
     }
@@ -79,9 +83,6 @@ export default {
     const spawnTabFor = async (rootId) => {
       const info = session(rootId)
       if (!info) return
-      const now = Date.now()
-      if (now - (spawned.get(rootId) ?? 0) < 10000) return
-      spawned.set(rootId, now)
 
       const out = await run(["pane", "list"])
       if (!out) return
@@ -91,7 +92,7 @@ export default {
       } catch {
         return
       }
-      if (panes.some((p) => p.pane_id !== pane && p.agent_session?.value === rootId)) return
+      if (panes.some((p) => p.pane_id !== pane && p.agent === "opencode" && p.agent_session?.value === rootId)) return
 
       const createArgs = ["tab", "create", "--no-focus"]
       if (info.directory) createArgs.push("--cwd", info.directory)
@@ -114,7 +115,9 @@ export default {
           path.join(spawnsDir, `${rootId}.json`),
           JSON.stringify({ pane: newPane, tab: tabId, session: rootId, at: Date.now() })
         )
-      } catch {}
+      } catch {
+        return
+      }
 
       let ready = false
       for (let i = 0; i < 40 && !ready; i++) {
@@ -130,22 +133,40 @@ export default {
       )
     }
 
+    const preserve = async (rootId) => {
+      if (spawning.has(rootId) || controller.signal.aborted) return
+      spawning.add(rootId)
+      try {
+        await spawnTabFor(rootId)
+      } finally {
+        spawning.delete(rootId)
+      }
+    }
+
     const tick = () => {
       const id = current()
+      if (id === undefined) return
       if (id === selected) return
       const departed = selected
       selected = id
-      if (departed) void spawnTabFor(departed).catch(() => {})
+      if (departed) void preserve(departed).catch(() => {})
       if (id) {
         const timer = setTimeout(() => {
+          scanTimers.delete(timer)
           void run(["plugin", "action", "invoke", "scan", "--plugin", "session-dedupe"])
         }, 1500)
+        scanTimers.add(timer)
         timer.unref?.()
       }
     }
 
     tick()
     const poll = setInterval(tick, POLL_MS)
-    api.lifecycle.onDispose(() => clearInterval(poll))
+    api.lifecycle.onDispose(() => {
+      controller.abort()
+      clearInterval(poll)
+      for (const timer of scanTimers) clearTimeout(timer)
+      scanTimers.clear()
+    })
   },
 }

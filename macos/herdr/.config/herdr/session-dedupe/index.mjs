@@ -13,6 +13,7 @@ const spawnsDir = process.env.HERDR_SPAWNS_DIR || path.join(os.homedir(), ".conf
 const GRACE_MS = 15000
 const PENDING_TTL_MS = 60000
 const MARKER_TTL_MS = 24 * 60 * 60 * 1000
+const STARTUP_MS = 60000
 const BUSY = new Set(["working", "blocked"])
 const CLOSEABLE = new Set(["idle", "done"])
 
@@ -88,9 +89,12 @@ const loadMarkers = () => {
 const pruneMarkers = (marked, panes) => {
   const now = Date.now()
   for (const [paneId, marker] of marked) {
+    const pane = panes.find((p) => p.pane_id === paneId)
+    const reported = pane && sessionOf(pane)
+    const starting = pane && !reported && now - marker.at < STARTUP_MS
     const stale =
       now - marker.at > MARKER_TTL_MS ||
-      !panes.some((p) => p.pane_id === paneId && sessionOf(p) === marker.session)
+      (!starting && reported !== marker.session)
     if (stale) {
       try {
         fs.rmSync(path.join(spawnsDir, marker.file), { force: true })
@@ -149,6 +153,7 @@ const scan = async () => {
     const sorted = orderGroup(group, owners)
     for (const dup of sorted.slice(1)) {
       if (!CLOSEABLE.has(dup.agent_status)) continue
+      if (dup.focused) continue
       if (marked.get(dup.pane_id)?.session === session) continue
       if (!claimPending(dup.pane_id)) continue
       const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "close", dup.pane_id, session], {
@@ -168,6 +173,7 @@ const closeDuplicate = async (paneId, session) => {
     if (!panes) return
     const dup = panes.find((p) => p.pane_id === paneId)
     if (!dup || sessionOf(dup) !== session || !CLOSEABLE.has(dup.agent_status)) return
+    if (dup.focused) return
     if (loadMarkers().get(dup.pane_id)?.session === session) return
     const group = orderGroup(panes.filter((p) => sessionOf(p) === session), readOwners())
     if (group.length < 2 || group[0].pane_id === paneId) return
