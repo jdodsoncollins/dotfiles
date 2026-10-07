@@ -92,7 +92,7 @@ node --test macos/tests/session-dedupe.test.mjs
 ```
 
 Verified: 19 mobile tests, 5 alias tests, 298 client-shell tests (2 manual profiling
-tests ignored), 2 catalog-watcher tests, and 6 dedupe safety tests. Release build
+tests ignored), 2 catalog-watcher tests, and 9 dedupe safety tests. Release build
 passed on macOS ARM64. Phone touch behavior still needs a Moshi reattach and visual
 confirmation; the tests do not replace that check.
 

@@ -15,11 +15,12 @@ const pane = (id, status = "idle", agent = "opencode") => ({
   agent_session: { value: session }, focused: true,
 })
 
-async function run(panes, args) {
+async function run(panes, args, markers = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "session-dedupe-test-"))
   try {
     const mock = path.join(dir, "herdr")
     const log = path.join(dir, "calls.jsonl")
+    const spawns = path.join(dir, "spawns")
     await fs.writeFile(mock, `#!${process.execPath}
 const fs = require("node:fs");
 const args = process.argv.slice(2);
@@ -33,8 +34,14 @@ if (args[0] === "pane" && args[1] === "list") {
     await fs.writeFile(path.join(dir, "owners.json"), JSON.stringify({
       "w1:p1": { session, since: 1 }, "w1:p2": { session, since: 2 },
     }))
+    await fs.mkdir(spawns, { recursive: true })
+    for (const [paneId, markerSession] of Object.entries(markers)) {
+      await fs.writeFile(path.join(spawns, `${markerSession}.json`),
+        JSON.stringify({ pane: paneId, session: markerSession, at: Date.now() }))
+    }
     await exec(process.execPath, [plugin, ...args], {
       env: { ...process.env, HERDR_BIN_PATH: mock, HERDR_PLUGIN_STATE_DIR: dir,
+        HERDR_SPAWNS_DIR: spawns,
         TEST_PANES: JSON.stringify(panes), TEST_LOG: log }, timeout: 25000,
     })
     const calls = await fs.readFile(log, "utf8").catch(() => "")
@@ -63,5 +70,20 @@ describe("session dedupe safety", { concurrency: true }, () => {
   })
   it("scan does not redirect focused busy panes", async () => {
     assert.deepEqual(await run([pane("w1:p1", "working"), pane("w1:p2", "blocked")], []), [])
+  })
+  it("never closes a marked session-tabs spawn", async () => {
+    assert.deepEqual(
+      await run([pane("w1:p1"), pane("w1:p2")], ["close", "w1:p2", session], { "w1:p2": session }),
+      [])
+  })
+  it("a marker for a different session does not protect", async () => {
+    assert.deepEqual(
+      await run([pane("w1:p1"), pane("w1:p2")], ["close", "w1:p2", session], { "w1:p2": "other" }),
+      [["pane", "close", "w1:p2"]])
+  })
+  it("still closes an unmarked duplicate when a marked spawn hosts the session", async () => {
+    assert.deepEqual(
+      await run([pane("w1:p1"), pane("w1:p2")], ["close", "w1:p2", session], { "w1:p1": session }),
+      [["pane", "close", "w1:p2"]])
   })
 })

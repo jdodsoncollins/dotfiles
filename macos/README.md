@@ -87,7 +87,7 @@ changes, update the other to match.
 - `tui.jsonc` also lists herdr's `herdr-tui-session.js`. Reinstalling the
   herdr opencode integration rewrites that file and breaks the symlink;
   copy the live file back, re-add `./session-tabs.js`, and re-link.
-- No duplicate session panes: herdr 0.9.1 has no dedupe setting, so the local
+- No duplicate session panes: herdr has no dedupe setting, so the local
   `session-dedupe` plugin (`~/.config/herdr/session-dedupe`, linked with
   `herdr plugin link ~/Projects/dotfiles/macos/herdr/.config/herdr/session-dedupe`)
   removes idle duplicate OpenCode session panes. The pane that is busy, or else
@@ -96,6 +96,12 @@ changes, update the other to match.
   left). Its tab closes too if only the herdr-sidebar dock remains. Busy panes
   and unknown-status panes are never closed. It rechecks ownership before
   closing and never issues focus commands that would redirect other clients.
+  `session-tabs` marks every tab it spawns in
+  `~/.config/herdr/session-tabs-spawns/<session>.json`, and a marked pane is
+  never closed as a duplicate: after `/new` the departed pane keeps reporting
+  the old session until there is activity in the new one, and leader election
+  would otherwise always favor that stale reporter and kill the fresh spawn.
+  Markers are pruned once the pane no longer hosts the session or after 24h.
   Hook events do not fire on session switches, so
   `session-tabs` calls the plugin's `scan` action after each `/sessions` pick.
 - The `last-reply` plugin reports sidebar metadata only: the `$last_reply`

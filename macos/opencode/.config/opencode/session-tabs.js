@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
+import fs from "node:fs"
+import path from "node:path"
 
 const exec = promisify(execFile)
 const POLL_MS = 250
@@ -21,6 +23,8 @@ export default {
 
     const herdr = env.HERDR_BIN_PATH
     const pane = env.HERDR_PANE_ID
+    const spawnsDir =
+      env.HERDR_SPAWNS_DIR || path.join(env.HOME || "", ".config", "herdr", "session-tabs-spawns")
     const spawned = new Map()
     let selected
 
@@ -101,6 +105,16 @@ export default {
         newPane = r?.root_pane?.pane_id
       } catch {}
       if (!tabId || !newPane) return
+
+      // Mark this pane as a deliberate session-tabs spawn so session-dedupe
+      // never closes it while the departed pane's report is still stale.
+      try {
+        fs.mkdirSync(spawnsDir, { recursive: true })
+        fs.writeFileSync(
+          path.join(spawnsDir, `${rootId}.json`),
+          JSON.stringify({ pane: newPane, tab: tabId, session: rootId, at: Date.now() })
+        )
+      } catch {}
 
       let ready = false
       for (let i = 0; i < 40 && !ready; i++) {

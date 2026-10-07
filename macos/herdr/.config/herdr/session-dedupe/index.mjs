@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -8,8 +9,10 @@ const exec = promisify(execFile)
 const herdr = process.env.HERDR_BIN_PATH || "herdr"
 const stateDir = process.env.HERDR_PLUGIN_STATE_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), ".state")
 const ownersFile = path.join(stateDir, "owners.json")
+const spawnsDir = process.env.HERDR_SPAWNS_DIR || path.join(os.homedir(), ".config", "herdr", "session-tabs-spawns")
 const GRACE_MS = 15000
 const PENDING_TTL_MS = 60000
+const MARKER_TTL_MS = 24 * 60 * 60 * 1000
 const BUSY = new Set(["working", "blocked"])
 const CLOSEABLE = new Set(["idle", "done"])
 
@@ -59,6 +62,44 @@ const writeOwners = (owners) => {
   } catch {}
 }
 
+// session-tabs marks the tabs it spawns (pane -> session) so a deliberate
+// resume is never closed as a duplicate while the departed pane's
+// agent_session report is still stale.
+const loadMarkers = () => {
+  const marked = new Map()
+  let files = []
+  try {
+    files = fs.readdirSync(spawnsDir)
+  } catch {
+    return marked
+  }
+  for (const file of files) {
+    if (!file.endsWith(".json")) continue
+    try {
+      const marker = JSON.parse(fs.readFileSync(path.join(spawnsDir, file), "utf8"))
+      if (typeof marker?.pane === "string" && typeof marker?.session === "string") {
+        marked.set(marker.pane, { session: marker.session, at: marker.at ?? 0, file })
+      }
+    } catch {}
+  }
+  return marked
+}
+
+const pruneMarkers = (marked, panes) => {
+  const now = Date.now()
+  for (const [paneId, marker] of marked) {
+    const stale =
+      now - marker.at > MARKER_TTL_MS ||
+      !panes.some((p) => p.pane_id === paneId && sessionOf(p) === marker.session)
+    if (stale) {
+      try {
+        fs.rmSync(path.join(spawnsDir, marker.file), { force: true })
+      } catch {}
+      marked.delete(paneId)
+    }
+  }
+}
+
 const pendingFile = (paneId) => path.join(stateDir, `pending-${paneId.replace(/[^a-zA-Z0-9]/g, "_")}`)
 
 const claimPending = (paneId) => {
@@ -100,11 +141,15 @@ const scan = async () => {
   }
   writeOwners(owners)
 
+  const marked = loadMarkers()
+  pruneMarkers(marked, panes)
+
   for (const [session, group] of groups) {
     if (group.length < 2) continue
     const sorted = orderGroup(group, owners)
     for (const dup of sorted.slice(1)) {
       if (!CLOSEABLE.has(dup.agent_status)) continue
+      if (marked.get(dup.pane_id)?.session === session) continue
       if (!claimPending(dup.pane_id)) continue
       const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "close", dup.pane_id, session], {
         detached: true,
@@ -123,6 +168,7 @@ const closeDuplicate = async (paneId, session) => {
     if (!panes) return
     const dup = panes.find((p) => p.pane_id === paneId)
     if (!dup || sessionOf(dup) !== session || !CLOSEABLE.has(dup.agent_status)) return
+    if (loadMarkers().get(dup.pane_id)?.session === session) return
     const group = orderGroup(panes.filter((p) => sessionOf(p) === session), readOwners())
     if (group.length < 2 || group[0].pane_id === paneId) return
     const tabId = dup.tab_id
