@@ -93,8 +93,9 @@ node --test macos/tests/session-tabs.test.mjs
 ```
 
 Verified: 19 mobile tests, 5 alias tests, 298 client-shell tests (2 manual profiling
-tests ignored), 2 catalog-watcher tests, 14 dedupe safety tests, and 9 session-tab
-lifecycle tests. Release build
+tests ignored), 2 catalog-watcher tests, and 14 dedupe safety tests. OpenCode 2
+migration verification adds 10 session-tab lifecycle tests, including V2
+location/worktree handling. Release build
 passed on macOS ARM64. Phone touch behavior still needs a Moshi reattach and visual
 confirmation; the tests do not replace that check.
 

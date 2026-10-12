@@ -3,6 +3,7 @@
 
 tap "snyk/tap"
 tap "stripe/stripe-cli"
+tap "anomalyco/tap"
 
 # CLI
 brew "aws-vault"
@@ -22,6 +23,7 @@ brew "mas"
 brew "memcached", restart_service: :changed
 brew "mkcert"
 brew "nvm"
+brew "anomalyco/tap/opencode-v2"
 brew "ocrmypdf"
 brew "overmind"
 brew "postgresql@17", restart_service: :changed
@@ -66,6 +68,7 @@ cask "ngrok"
 cask "notion"
 cask "obsidian"
 cask "openaudible"
+cask "opencode-desktop"
 cask "plex"
 cask "spotify"
 cask "transmission"
@@ -89,7 +92,6 @@ cask "docker-desktop"
 cask "fork"
 cask "google-chrome"
 cask "netnewswire"
-cask "opencode-desktop"
 cask "purevpn"
 cask "readdle-spark"
 cask "rustdesk"

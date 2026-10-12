@@ -43,3 +43,19 @@ Prefer a brew formula or cask over a website download. After installing a brew c
 ## Ghostty
 
 macOS reads `~/.config/ghostty/config` and `~/Library/Application Support/com.mitchellh.ghostty/config`. The Application Support copy wins, including an empty file. `install.sh` moves a leftover non-symlink aside. Ghostty starts `herdr` on the first surface only (`initial-command`); do not also `brew services start herdr`.
+
+## OpenCode
+
+Use OpenCode 2 (`anomalyco/tap/opencode-v2`), with terminal settings in global
+`cli.json`. CLI plugins expose a directory's `tui.ts` entrypoint and use
+`setup`, `api.ui.router.current()`, `api.data.session`, and returned cleanup.
+Do not register custom V2 plugins in V1 `tui.json(c)` or use its `api.route` /
+`api.state` API. Herdr still creates a legacy TUI config for its own V1
+compatibility check; leave that managed file alone. Herdr owns its integration
+files; custom plugins live beside them. Keep
+Herdr's `./herdr-opencode` and our `./session-tabs` entries when preserving
+settings written through the UI. After changing session-tab behavior, run:
+
+```sh
+node --test macos/tests/session-tabs.test.mjs macos/tests/session-dedupe.test.mjs
+```

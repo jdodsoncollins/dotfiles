@@ -10,7 +10,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export default {
   id: "dotfiles.session-tabs",
-  tui: async (api) => {
+  setup: async (api) => {
     const env = process.env
     if (
       env.HERDR_ENV !== "1" ||
@@ -42,7 +42,7 @@ export default {
 
     const session = (id) => {
       try {
-        return api.state.session.get(id)
+        return api.data.session.get(id)
       } catch {
         return undefined
       }
@@ -62,9 +62,9 @@ export default {
     }
 
     const current = () => {
-      const route = api.route.current
-      if (route?.name === "home") return null
-      const id = route?.name === "session" ? route.params?.sessionID : undefined
+      const route = api.ui.router.current()
+      if (route?.type === "home") return null
+      const id = route?.type === "session" ? route.sessionID : undefined
       return typeof id === "string" && id ? rootOf(id) : undefined
     }
 
@@ -95,7 +95,7 @@ export default {
       if (panes.some((p) => p.pane_id !== pane && p.agent === "opencode" && p.agent_session?.value === rootId)) return
 
       const createArgs = ["tab", "create", "--no-focus"]
-      if (info.directory) createArgs.push("--cwd", info.directory)
+      if (info.location?.directory) createArgs.push("--cwd", info.location.directory)
       const createdOut = await run(createArgs)
       if (!createdOut) return
       let tabId
@@ -162,11 +162,11 @@ export default {
 
     tick()
     const poll = setInterval(tick, POLL_MS)
-    api.lifecycle.onDispose(() => {
+    return () => {
       controller.abort()
       clearInterval(poll)
       for (const timer of scanTimers) clearTimeout(timer)
       scanTimers.clear()
-    })
+    }
   },
 }

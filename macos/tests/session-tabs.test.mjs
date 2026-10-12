@@ -18,11 +18,11 @@ async function harness(test) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "session-tabs-test-"))
   const calls = []
   const sessions = new Map([
-    ["A", { id: "A", directory: "/project" }],
-    ["old", { id: "old", directory: "/project" }],
+    ["A", { id: "A", location: { directory: "/project" } }],
+    ["old", { id: "old", location: { directory: "/project" } }],
     ["child", { id: "child", parentID: "A" }],
   ])
-  let route = { name: "session", params: { sessionID: "A" } }
+  let route = { type: "session", sessionID: "A" }
   let poll
   let dispose
   let panes = []
@@ -30,9 +30,8 @@ async function harness(test) {
   let count = 0
   const timers = new Set()
   const api = {
-    route: { get current() { return route } },
-    state: { session: { get: (id) => sessions.get(id) } },
-    lifecycle: { onDispose: (fn) => { dispose = fn } },
+    ui: { router: { current: () => route } },
+    data: { session: { get: (id) => sessions.get(id) } },
   }
   const context = vm.createContext({
     fs: fsSync, path, os, promisify, AbortController,
@@ -74,10 +73,10 @@ async function harness(test) {
   })
   try {
     vm.runInContext(source, context)
-    await context.plugin.tui(api)
+    dispose = await context.plugin.setup(api)
     const h = {
       calls, sessions,
-      select(id) { route = id ? { name: "session", params: { sessionID: id } } : { name: "home" }; poll() },
+      select(id) { route = id ? { type: "session", sessionID: id } : { type: "home" }; poll() },
       tick() { poll() },
       dispose() { dispose() },
       panes(value) { panes = value },
@@ -145,7 +144,7 @@ describe("sessions own their tab views", () => {
       h.select("loading")
       await flush()
       assert.equal(h.creates().length, 0)
-      h.sessions.set("loading", { id: "loading", directory: "/project" })
+      h.sessions.set("loading", { id: "loading", location: { directory: "/project" } })
       h.tick()
       await flush()
       assert.deepEqual(h.starts().map((args) => args.at(-1)), ["A"])
@@ -156,6 +155,14 @@ describe("sessions own their tab views", () => {
       h.select("child")
       await flush()
       assert.equal(h.creates().length, 0)
+    })
+  })
+  it("opens the resumed tab in the session's V2 location, including after a worktree move", async () => {
+    await harness(async (h) => {
+      h.sessions.get("A").location.directory = "/worktrees/rate-limit"
+      h.select(undefined)
+      await flush()
+      assert.deepEqual(h.creates()[0].slice(-2), ["--cwd", "/worktrees/rate-limit"])
     })
   })
   it("coalesces repeated departures while a spawn is still in flight", async () => {
