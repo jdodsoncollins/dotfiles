@@ -1,0 +1,61 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Global guardrails. Agent-specific rules (agents/*.md) are appended after these.
+  // Under `opencode run --auto`, "ask" is auto-approved, so anything that must never
+  // happen unattended is "deny" here or in the afk agent, never "ask".
+  "permissions": [
+    // Humans merge. Agents never merge.
+    { "action": "shell", "resource": "gh pr merge *", "effect": "deny" },
+    // Draft PRs only.
+    { "action": "shell", "resource": "gh pr create *", "effect": "deny" },
+    { "action": "shell", "resource": "gh pr create *--draft*", "effect": "allow" },
+    // No force pushes, except --force-with-lease for your own rebased stacks.
+    { "action": "shell", "resource": "git push *--force*", "effect": "deny" },
+    { "action": "shell", "resource": "git push *--force-with-lease*", "effect": "allow" },
+    { "action": "shell", "resource": "git push -f*", "effect": "deny" },
+    { "action": "shell", "resource": "git push * -f*", "effect": "deny" },
+    { "action": "shell", "resource": "git push *+*", "effect": "deny" },
+    // Never push to trunk.
+    { "action": "shell", "resource": "git push * dev", "effect": "deny" },
+    { "action": "shell", "resource": "git push * *:dev", "effect": "deny" },
+    { "action": "shell", "resource": "git push * main", "effect": "deny" },
+    { "action": "shell", "resource": "git push * *:main", "effect": "deny" }
+  ],
+  // pstack (cursor/plugins). Update with: git -C ~/Projects/vendor/cursor-plugins pull
+  // Explicit sources win over ~/.agents/skills, so pstack's `tdd` and `teach` replace
+  // Matt Pocock's skills with the same IDs in OpenCode.
+  "skills": ["~/Projects/vendor/cursor-plugins/pstack/skills"],
+  "mcp": {
+    "linear": {
+      "type": "remote",
+      "url": "https://mcp.linear.app/mcp",
+      "timeout": 30000,
+      "enabled": true
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--autoConnect"],
+      "enabled": true
+    },
+    "webflow": {
+      "type": "remote",
+      "url": "https://mcp.webflow.com/mcp",
+      "enabled": true
+    },
+    "unblocked": {
+      "type": "local",
+      "command": [
+        "/Users/jeremycollins/.unblocked/agent/node/bin/node",
+        "/Applications/Unblocked.app/Contents/Resources/cli/server.js",
+        "--client",
+        "mcp"
+      ],
+      "enabled": true
+    },
+    "flower": {
+      "type": "local",
+      "command": ["/Users/jeremycollins/.flower/bin/flower", "mcp"],
+      "enabled": true
+    }
+  }
+}
