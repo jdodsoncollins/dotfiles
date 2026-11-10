@@ -53,7 +53,11 @@ ln -s ../../.agents/skills/agent-loop ~/.claude/skills/agent-loop
 ln -s ../../.agents/skills/verify-waf ~/.claude/skills/verify-waf
 ```
 
-pstack lives in a vendor clone at `~/Projects/vendor/cursor-plugins` for OpenCode and as the `pstack@cursor-plugins` Claude Code plugin.
+pstack lives in a vendor clone at `~/Projects/vendor/cursor-plugins` for OpenCode and as the `pstack@cursor-plugins` Claude Code plugin (auto-update on).
+
+Skill precedence is Agentflow (in-repo `.agentflow/skills`) > `~/.agents/skills` (Pocock and personal) > pstack. OpenCode reads pstack through `~/.local/share/pstack-skills`, which `pstack-skills-sync` rebuilds without any ID a higher tier already defines. After `git -C ~/Projects/vendor/cursor-plugins pull`, run `pstack-skills-sync`.
+
+OpenCode does not notice edits made through a stowed symlink, because it watches `~/.config/opencode` and the write lands in this repository. After editing a stowed OpenCode file, run `touch -h ~/.config/opencode/<file-or-dir>` or `/reload` in the TUI.
 
 ## jev
 

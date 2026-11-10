@@ -21,10 +21,13 @@
     { "action": "shell", "resource": "git push * main", "effect": "deny" },
     { "action": "shell", "resource": "git push * *:main", "effect": "deny" }
   ],
-  // pstack (cursor/plugins). Update with: git -C ~/Projects/vendor/cursor-plugins pull
-  // Explicit sources win over ~/.agents/skills, so pstack's `tdd` and `teach` replace
-  // Matt Pocock's skills with the same IDs in OpenCode.
-  "skills": ["~/Projects/vendor/cursor-plugins/pstack/skills"],
+  // Skill precedence: Agentflow (in-repo, live) > ~/.agents/skills (Pocock and personal) > pstack.
+  // pstack loads from a filtered view that drops any ID a higher tier defines.
+  // After a pstack update: git -C ~/Projects/vendor/cursor-plugins pull && pstack-skills-sync
+  "skills": [
+    "~/.local/share/pstack-skills",
+    ".agentflow/skills"
+  ],
   "mcp": {
     "linear": {
       "type": "remote",

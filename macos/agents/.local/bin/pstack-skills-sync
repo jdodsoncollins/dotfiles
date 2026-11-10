@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Rebuild the OpenCode view of pstack skills, leaving out every skill ID that
+# Agentflow or ~/.agents/skills already defines.
+# Precedence: Agentflow > ~/.agents/skills (Pocock and personal) > pstack.
+# Run after: git -C ~/Projects/vendor/cursor-plugins pull
+set -euo pipefail
+
+src="${PSTACK_SKILLS:-$HOME/Projects/vendor/cursor-plugins/pstack/skills}"
+dest="${PSTACK_VIEW:-$HOME/.local/share/pstack-skills}"
+agentflow="${AGENTFLOW_SKILLS:-$HOME/Projects/webflow/.agentflow/skills}"
+shared="$HOME/.agents/skills"
+
+[[ -d "$src" ]] || { echo "pstack skills not found at $src" >&2; exit 1; }
+mkdir -p "$dest"
+find "$dest" -mindepth 1 -maxdepth 1 -type l -delete
+
+linked=0
+shadowed=()
+for dir in "$src"/*/; do
+  dir="${dir%/}"
+  id="$(basename "$dir")"
+  [[ -f "$dir/SKILL.md" ]] || continue
+  if [[ -e "$agentflow/$id" || -e "$shared/$id" ]]; then
+    shadowed+=("$id")
+    continue
+  fi
+  ln -s "$dir" "$dest/$id"
+  linked=$((linked + 1))
+done
+
+echo "pstack view at $dest: $linked linked; shadowed by higher-precedence skills: ${shadowed[*]:-none}"

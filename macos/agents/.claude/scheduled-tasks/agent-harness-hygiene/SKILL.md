@@ -16,7 +16,7 @@ LOOPS:
 
 PSTACK:
 - `git -C ~/Projects/vendor/cursor-plugins fetch --depth 1 origin main` then report how many commits `HEAD` is behind `origin/main`, and the pstack version in `pstack/plugin.json` on each side.
-- Report the installed Claude plugin version from `claude plugin list`. If an update exists, print the commands (`git -C ~/Projects/vendor/cursor-plugins pull` and `claude plugin update pstack@cursor-plugins`). Do not run them.
+- Report the installed Claude plugin version from `claude plugin list`. If an update exists, print the commands (`git -C ~/Projects/vendor/cursor-plugins pull && pstack-skills-sync` for OpenCode; the Claude plugin auto-updates). Do not run them.
 
 OUTPUT:
 - Write `~/agent-queue/hygiene-<YYYY-MM-DD>.md`.

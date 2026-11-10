@@ -42,6 +42,10 @@ permissions:
   - { action: shell, resource: "git worktree remove*", effect: deny }
   - { action: shell, resource: "git stash drop*", effect: deny }
   - { action: shell, resource: "git stash clear*", effect: deny }
+  # Pushes must name the branch, so the global dev/main denies can see it.
+  - { action: shell, resource: "git push", effect: deny }
+  - { action: shell, resource: "git push origin", effect: deny }
+  - { action: shell, resource: "git push * HEAD", effect: deny }
   - { action: shell, resource: "git push --delete*", effect: deny }
   - { action: shell, resource: "git push * --delete*", effect: deny }
   - { action: shell, resource: "git push * :*", effect: deny }

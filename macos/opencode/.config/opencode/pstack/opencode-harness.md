@@ -70,6 +70,7 @@ OpenCode has no Cursor Automations, Bugbot, Cursor cloud agents, `/deslop`, `con
 
 These beat any pstack playbook step:
 
+- Skill precedence in `~/.config/opencode/AGENTS.md` beats pstack routing. pstack's own `tdd` and `teach` are shadowed: when a pstack step names them, the Pocock skills with those IDs run. Read pstack's copy at `<pstack>/skills/<name>/SKILL.md` only when the user asks for it by path.
 - Never merge. `autopilot-full` and `shipping` stop at a verified, green, draft-or-ready PR; the human lands it. Prefer `autopilot-stack`.
 - Draft PRs only, assigned to `@me`, PR body via the `pr-description` skill.
 - Never post comments, replies, or ticket changes as the user without an explicit instruction.
