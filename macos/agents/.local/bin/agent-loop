@@ -1,0 +1,486 @@
+#!/usr/bin/env node
+// agent-loop: run a coding agent headless in a loop until a stop command passes.
+// trigger -> act (one unit) -> verify (runner-owned) -> persist (ledger + files) -> stop | escalate.
+
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
+const HOME = homedir();
+const GRAPH_SCRIPTS =
+  process.env.AGENT_LOOP_GRAPH_SCRIPTS ?? join(HOME, ".agents/skills/webflow-graph-work/scripts");
+const AFK_AGENT_FILE = join(HOME, ".config/opencode/agents/afk.md");
+const EXIT = { done: 0, error: 1, budget: 2, escalated: 3, stalled: 4 };
+
+const CLAUDE_DISALLOWED = [
+  "Bash(gh pr merge *)",
+  "Bash(gh pr ready *)",
+  "Bash(gh pr comment *)",
+  "Bash(gh pr review *)",
+  "Bash(gh pr edit *)",
+  "Bash(gh pr close *)",
+  "Bash(gh issue create *)",
+  "Bash(gh issue comment *)",
+  "Bash(gh api *)",
+  "Bash(git push --force *)",
+  "Bash(git push -f *)",
+  "Bash(git reset --hard *)",
+  "Bash(git clean *)",
+  "Bash(git branch -D *)",
+  "Bash(rm -rf *)",
+  "Bash(./wfdev.sh deploy *)",
+  "Bash(aws *)",
+  "mcp__webflow",
+];
+
+const USAGE = `agent-loop: run an agent headless until a stop command passes
+
+  agent-loop init <slug> --goal "<text>" --stop "<cmd>" [options]
+      --verify "<cmd>"       runner-owned check after every iteration (recommended)
+      --max-iter <n>         iteration budget (default 8)
+      --max-minutes <n>      wall-clock budget (default 120)
+      --interval <sec>       pause between iterations (default 0)
+      --harness <name>       opencode (default) or claude
+      --agent <id>           opencode agent (default afk)
+      --model <slug>         opencode provider/model#variant, or claude model alias
+      --max-usd <n>          claude only: per-iteration spend cap
+      --pr <mode>            none (default) or draft: may the agent open a draft PR
+      --workspace <dir>      repo or worktree to run in (default: cwd)
+  agent-loop run <run-dir> [--dry-run]
+  agent-loop status <run-dir>
+  agent-loop list [workspace]
+
+Exit codes: 0 stop condition met, 2 budget exhausted, 3 escalated, 4 stalled, 1 error.
+Run state: <workspace>/tmp/agent-runs/<run-id>/ (loop.json, LOOP.md, progress.md, events.jsonl).`;
+
+function parseArgs(argv) {
+  const positional = [];
+  const flags = {};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) flags[key] = true;
+      else {
+        flags[key] = next;
+        i++;
+      }
+    } else positional.push(arg);
+  }
+  return { positional, flags };
+}
+
+function die(message, code = EXIT.error) {
+  console.error(`agent-loop: ${message}`);
+  process.exit(code);
+}
+
+function sh(command, cwd, timeoutMs = 30 * 60 * 1000) {
+  const result = spawnSync("/bin/zsh", ["-lc", command], {
+    cwd,
+    encoding: "utf8",
+    timeout: timeoutMs,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return {
+    status: result.status ?? (result.signal ? 124 : 1),
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+}
+
+function node(script, args, cwd) {
+  const result = spawnSync(process.execPath, [join(GRAPH_SCRIPTS, script), ...args], {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) die(`${script} failed: ${(result.stderr || result.stdout).trim()}`);
+  return result.stdout.trim();
+}
+
+const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+const readEvents = (runDir) =>
+  readFileSync(join(runDir, "events.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+
+function appendEvent(runDir, event) {
+  return node("append-event.mjs", [runDir, JSON.stringify(event)], runDir);
+}
+
+function latestStatus(runDir, nodeId) {
+  return [...readEvents(runDir)].reverse().find((event) => event.nodeId === nodeId)?.status;
+}
+
+function fingerprint(workspace, runDir) {
+  const hash = createHash("sha256");
+  hash.update(sh("git rev-parse HEAD", workspace).stdout);
+  hash.update(sh("git status --porcelain", workspace).stdout);
+  hash.update(sh("git diff", workspace).stdout);
+  const progress = join(runDir, "progress.md");
+  if (existsSync(progress)) hash.update(readFileSync(progress));
+  return hash.digest("hex");
+}
+
+function notify(title, message) {
+  const escape = (value) => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  spawnSync("osascript", [
+    "-e",
+    `display notification "${escape(message.slice(0, 200))}" with title "${escape(title)}"`,
+  ]);
+}
+
+function afkRules() {
+  if (!existsSync(AFK_AGENT_FILE)) return "";
+  return readFileSync(AFK_AGENT_FILE, "utf8").replace(/^---[\s\S]*?\n---\n/, "").trim();
+}
+
+function init(slug, flags) {
+  if (!slug) die("init needs a slug\n\n" + USAGE);
+  if (!flags.goal || !flags.stop) die("init needs --goal and --stop");
+  const harness = flags.harness ?? "opencode";
+  if (!["opencode", "claude"].includes(harness)) die(`unknown harness: ${harness}`);
+  const pr = flags.pr ?? "none";
+  if (!["none", "draft"].includes(pr)) die(`--pr must be none or draft`);
+
+  const workspaceInput = resolve(flags.workspace ?? process.cwd());
+  const top = sh("git rev-parse --show-toplevel", workspaceInput);
+  if (top.status !== 0) die(`${workspaceInput} is not inside a Git worktree`);
+  const workspace = top.stdout.trim();
+
+  const runDir = node("init-run.mjs", [slug, workspace], workspace);
+  const loop = {
+    schemaVersion: 1,
+    slug,
+    goal: flags.goal,
+    stop: flags.stop,
+    verify: flags.verify ?? null,
+    budget: {
+      maxIterations: Number(flags["max-iter"] ?? 8),
+      maxMinutes: Number(flags["max-minutes"] ?? 120),
+      maxUsdPerIteration: flags["max-usd"] ? Number(flags["max-usd"]) : null,
+    },
+    intervalSeconds: Number(flags.interval ?? 0),
+    harness,
+    agent: flags.agent ?? "afk",
+    model: flags.model ?? null,
+    pr,
+    workspace,
+    createdAt: new Date().toISOString(),
+  };
+  writeFileSync(join(runDir, "loop.json"), `${JSON.stringify(loop, null, 2)}\n`);
+
+  writeFileSync(
+    join(runDir, "LOOP.md"),
+    `# Loop: ${slug}
+
+## Goal
+
+${loop.goal}
+
+## Stop condition
+
+The runner executes this in \`${workspace}\` before every iteration. Exit 0 ends the loop.
+
+\`\`\`sh
+${loop.stop}
+\`\`\`
+
+## Verify
+
+${
+  loop.verify
+    ? `The runner executes this after every iteration and records the result in the ledger.\n\n\`\`\`sh\n${loop.verify}\n\`\`\``
+    : "No runner-owned verify command. Each iteration must prove its unit with the `verifier` subagent."
+}
+
+## Unit of work
+
+One small change that ends in a verifiable state. Prefer the unit that moves the stop condition closest to passing.
+
+## Budget
+
+- ${loop.budget.maxIterations} iterations, ${loop.budget.maxMinutes} minutes wall clock${
+      loop.budget.maxUsdPerIteration ? `, $${loop.budget.maxUsdPerIteration} per iteration` : ""
+    }.
+- Two iterations without a change to the code or \`progress.md\` count as a stall and end the loop.
+
+## Escalate when
+
+- The stop condition or the spec is wrong, ambiguous, or unreachable from this worktree.
+- A human decision, credential, or external state change is needed.
+- The same approach failed twice.
+
+Write \`ESCALATE.md\` in this directory with what you tried, the evidence, the exact decision needed, and your recommended answer. Then end the iteration.
+
+## Never
+
+- Merge, mark ready, comment on, or close PRs. Change tickets, flags, monitors, or production systems. Force push. Push to \`dev\` or \`main\`.
+- ${loop.pr === "draft" ? "Open more than one draft PR for this loop. Use `gh pr create --draft --assignee @me`." : "Open a PR."}
+`,
+  );
+  writeFileSync(join(runDir, "progress.md"), `# Progress: ${slug}\n\n`);
+
+  appendEvent(runDir, {
+    nodeId: "intake",
+    nodeType: "coordinator",
+    status: "passed",
+    summary: `Loop spec written (${harness}/${loop.agent}, ${loop.budget.maxIterations} iterations)`,
+    artifacts: [join(runDir, "LOOP.md"), join(runDir, "loop.json")],
+  });
+
+  console.log(runDir);
+}
+
+function iterationPrompt(loop, runDir, n) {
+  return `You are iteration ${n} of the agent loop "${loop.slug}".
+
+Run directory: ${runDir}
+Workspace: ${loop.workspace}
+
+1. Read ${join(runDir, "LOOP.md")}, ${join(runDir, "progress.md")}, and the last 20 lines of ${join(runDir, "events.jsonl")}.
+2. Pick the single next unit of work that moves the stop condition closest to passing. Do only that unit.
+3. Prove the unit${loop.verify ? ` by running: ${loop.verify}` : " with the verifier subagent"}. The runner re-checks independently, so do not claim a pass you did not observe.
+4. Append to progress.md: iteration ${n}, the unit, the evidence, and the next unit.
+5. If you are blocked or need a human decision, write ${join(runDir, "ESCALATE.md")} with a decision-ready brief and stop.
+
+End your reply with one line: SUMMARY: <what this iteration did, under 200 characters>`;
+}
+
+function invokeHarness(loop, runDir, n) {
+  const prompt = iterationPrompt(loop, runDir, n);
+  const log = join(runDir, `iter-${n}.log`);
+  let command;
+  let args;
+  if (loop.harness === "opencode") {
+    command = "opencode";
+    args = ["run", "--agent", loop.agent, "--auto", "--format", "json", "--title", `loop ${loop.slug} #${n}`];
+    if (loop.model) args.push("--model", loop.model);
+    args.push(prompt);
+  } else {
+    command = "claude";
+    args = ["-p", "--permission-mode", "auto", "--output-format", "json"];
+    if (loop.model) args.push("--model", loop.model);
+    if (loop.budget.maxUsdPerIteration) args.push("--max-budget-usd", String(loop.budget.maxUsdPerIteration));
+    args.push("--disallowedTools", ...CLAUDE_DISALLOWED);
+    const rules = afkRules();
+    if (rules) args.push("--append-system-prompt", rules);
+    args.push("--", prompt);
+  }
+  const started = Date.now();
+  const result = spawnSync(command, args, {
+    cwd: loop.workspace,
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+    timeout: loop.budget.maxMinutes * 60 * 1000,
+  });
+  writeFileSync(log, `${result.stdout ?? ""}\n--- stderr ---\n${result.stderr ?? ""}`);
+
+  let text = "";
+  let sessionID = null;
+  if (loop.harness === "opencode") {
+    for (const line of (result.stdout ?? "").split("\n")) {
+      try {
+        const event = JSON.parse(line);
+        sessionID ??= event.sessionID ?? null;
+        if (event.type === "text" && event.part?.text) text = event.part.text;
+      } catch {}
+    }
+  } else {
+    try {
+      const parsed = JSON.parse(result.stdout);
+      const final = Array.isArray(parsed)
+        ? [...parsed].reverse().find((entry) => entry?.type === "result") ?? {}
+        : parsed;
+      text = final.result ?? "";
+      sessionID = final.session_id ?? null;
+    } catch {
+      text = result.stdout ?? "";
+    }
+  }
+  const summary = text.match(/SUMMARY:\s*(.+)/)?.[1]?.trim() ?? text.trim().split("\n").pop() ?? "";
+  return {
+    status: result.status ?? 1,
+    summary: summary.slice(0, 240) || "no summary returned",
+    sessionID,
+    log,
+    seconds: Math.round((Date.now() - started) / 1000),
+  };
+}
+
+function lastIterationNode(runDir) {
+  return [...readEvents(runDir)].reverse().find((event) => /^iter-\d+$/.test(event.nodeId))?.nodeId ?? null;
+}
+
+function finish(runDir, nodeId, nodeType, status, summary, parent, code, loop) {
+  const parents = parent ? [parent] : ["intake"];
+  const latest = latestStatus(runDir, nodeId);
+  if (latest === undefined || latest === "blocked" || latest === "failed") {
+    appendEvent(runDir, { nodeId, nodeType, status: "active", summary: "checking", parentNodeIds: parents });
+  }
+  appendEvent(runDir, { nodeId, nodeType, status, summary, parentNodeIds: parents });
+  notify(`agent-loop ${loop.slug}`, summary);
+  console.log(`${nodeId}: ${summary}`);
+  process.exit(code);
+}
+
+function run(runDirInput, flags) {
+  if (!runDirInput) die("run needs a run directory");
+  const runDir = resolve(runDirInput);
+  const loop = readJson(join(runDir, "loop.json"));
+  const started = Date.now();
+  const iterNumbers = readEvents(runDir)
+    .map((event) => event.nodeId.match(/^iter-(\d+)$/)?.[1])
+    .filter(Boolean)
+    .map(Number);
+  let iteration = iterNumbers.length ? Math.max(...iterNumbers) : 0;
+  let stalls = 0;
+
+  const interrupted = lastIterationNode(runDir);
+  if (interrupted && latestStatus(runDir, interrupted) === "active" && !flags["dry-run"]) {
+    appendEvent(runDir, {
+      nodeId: interrupted,
+      nodeType: "writer",
+      status: "failed",
+      summary: "Interrupted before the iteration recorded a result",
+      parentNodeIds: readEvents(runDir).find((event) => event.nodeId === interrupted)?.parentNodeIds ?? ["intake"],
+    });
+  }
+
+  if (flags["dry-run"]) {
+    console.log(JSON.stringify(loop, null, 2));
+    console.log("\nFirst iteration prompt:\n");
+    console.log(iterationPrompt(loop, runDir, iteration + 1));
+    const stop = sh(loop.stop, loop.workspace);
+    console.log(`\nStop command now exits ${stop.status}`);
+    return;
+  }
+
+  for (;;) {
+    const previous = lastIterationNode(runDir);
+
+    if (existsSync(join(runDir, "ESCALATE.md"))) {
+      const brief = readFileSync(join(runDir, "ESCALATE.md"), "utf8").split("\n").find((line) => line.trim()) ?? "";
+      finish(runDir, "escalate", "approval", "blocked", `Escalated: ${brief.slice(0, 160)}`, previous, EXIT.escalated, loop);
+    }
+
+    const stop = sh(loop.stop, loop.workspace);
+    if (stop.status === 0) {
+      finish(runDir, "stop", "gate", "passed", `Stop condition met after ${iteration} iterations`, previous, EXIT.done, loop);
+    }
+
+    const minutes = (Date.now() - started) / 60000;
+    if (iteration >= loop.budget.maxIterations || minutes >= loop.budget.maxMinutes) {
+      finish(
+        runDir,
+        "budget",
+        "gate",
+        "blocked",
+        `Budget exhausted: ${iteration} iterations, ${Math.round(minutes)} minutes; stop command still exits ${stop.status}`,
+        previous,
+        EXIT.budget,
+        loop,
+      );
+    }
+
+    iteration++;
+    const nodeId = `iter-${iteration}`;
+    const parents = previous ? [previous] : ["intake"];
+    const before = fingerprint(loop.workspace, runDir);
+    appendEvent(runDir, {
+      nodeId,
+      nodeType: "writer",
+      status: "active",
+      summary: `Iteration ${iteration} started`,
+      parentNodeIds: parents,
+      owner: `${loop.harness}/${loop.agent}`,
+      attempt: iteration,
+    });
+
+    const outcome = invokeHarness(loop, runDir, iteration);
+    const evidence = [{ kind: "harness", result: outcome.status === 0 ? "pass" : "fail", ref: outcome.log }];
+    let verified = true;
+    if (loop.verify) {
+      const check = sh(loop.verify, loop.workspace);
+      const verifyLog = join(runDir, `iter-${iteration}.verify.log`);
+      writeFileSync(verifyLog, `${check.stdout}\n--- stderr ---\n${check.stderr}`);
+      verified = check.status === 0;
+      evidence.push({ kind: "verify", result: verified ? "pass" : "fail", ref: verifyLog });
+    }
+
+    const after = fingerprint(loop.workspace, runDir);
+    stalls = before === after ? stalls + 1 : 0;
+
+    appendEvent(runDir, {
+      nodeId,
+      nodeType: "writer",
+      status: outcome.status === 0 && verified ? "passed" : "failed",
+      summary: outcome.summary,
+      parentNodeIds: parents,
+      owner: `${loop.harness}/${loop.agent}`,
+      attempt: iteration,
+      artifacts: [outcome.log],
+      evidence,
+      metadata: { sessionID: outcome.sessionID, seconds: outcome.seconds, changed: before !== after },
+    });
+    console.log(`${nodeId}: ${outcome.status === 0 && verified ? "passed" : "failed"} (${outcome.seconds}s) ${outcome.summary}`);
+
+    if (stalls >= 2) {
+      finish(runDir, "stall", "gate", "blocked", `Stalled: ${stalls} iterations with no change`, nodeId, EXIT.stalled, loop);
+    }
+
+    if (loop.intervalSeconds > 0) spawnSync("sleep", [String(loop.intervalSeconds)]);
+  }
+}
+
+function status(runDirInput) {
+  if (!runDirInput) die("status needs a run directory");
+  const runDir = resolve(runDirInput);
+  const loop = readJson(join(runDir, "loop.json"));
+  const events = readEvents(runDir);
+  console.log(`${loop.slug}: ${loop.goal}`);
+  console.log(`harness ${loop.harness}/${loop.agent}${loop.model ? ` (${loop.model})` : ""}, budget ${loop.budget.maxIterations} iterations / ${loop.budget.maxMinutes} min`);
+  console.log(`escalated: ${existsSync(join(runDir, "ESCALATE.md")) ? "yes, read ESCALATE.md" : "no"}\n`);
+  for (const event of events.slice(-12)) console.log(`${event.seq}\t${event.nodeId}\t${event.status}\t${event.summary}`);
+  console.log("");
+  console.log(node("render-mermaid.mjs", [runDir], runDir));
+}
+
+function list(workspaceInput) {
+  const top = sh("git rev-parse --show-toplevel", resolve(workspaceInput ?? process.cwd()));
+  if (top.status !== 0) die("not inside a Git worktree");
+  const runsRoot = join(top.stdout.trim(), "tmp/agent-runs");
+  if (!existsSync(runsRoot)) return;
+  for (const entry of readdirSync(runsRoot).sort()) {
+    const loopFile = join(runsRoot, entry, "loop.json");
+    if (!existsSync(loopFile)) continue;
+    const events = readEvents(join(runsRoot, entry));
+    const last = events[events.length - 1];
+    console.log(`${join(runsRoot, entry)}\t${last.nodeId}\t${last.status}\t${last.summary}`);
+  }
+}
+
+const [command, ...rest] = process.argv.slice(2);
+const { positional, flags } = parseArgs(rest);
+switch (command) {
+  case "init":
+    init(positional[0], flags);
+    break;
+  case "run":
+    run(positional[0], flags);
+    break;
+  case "status":
+    status(positional[0]);
+    break;
+  case "list":
+    list(positional[0]);
+    break;
+  default:
+    console.log(USAGE);
+    process.exit(command ? EXIT.error : 0);
+}

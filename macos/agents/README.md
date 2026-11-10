@@ -31,6 +31,30 @@ The command intentionally excludes:
 Use the source runtime's skill installation mechanism to add or update a global skill.
 Do not copy credentials, connector configuration, or plugin caches into this repository.
 
+## Loop and graph harness
+
+This package also stows the personal loop and graph harness shared by OpenCode, Claude Code, and Codex:
+
+| Path | Purpose |
+| --- | --- |
+| `.agents/skills/webflow-graph-work/` | Execution graph with an append-only ledger (moved here from `~/.codex/skills`). Codex and Claude reach it through symlinks in `~/.codex/skills` and `~/.claude/skills`. |
+| `.agents/skills/agent-loop/` | Loop design (trigger, unit, stop, verify, budget, state, escalation, gates) and the Flower overnight automation spec. |
+| `.agents/skills/verify-waf/` | pstack-style verification skill and feature map for the customer WAF surface. |
+| `.local/bin/agent-loop` | Headless loop runner: `agent-loop init|run|status|list`. Runs `opencode run --agent afk --auto` or `claude -p` once per iteration and records each one in the graph ledger. |
+| `.claude/agents/verifier.md` | Opus verifier subagent for Claude Code. |
+| `.claude/rules/pstack-models.md` | pstack role-to-model map for Claude Code. |
+| `.claude/scheduled-tasks/*/SKILL.md` | Prompts for Claude Desktop scheduled tasks. The schedule itself is registered in Claude Desktop. |
+
+The `~/.claude/skills` links are plain symlinks, not stow-managed:
+
+```sh
+ln -s ../../.agents/skills/webflow-graph-work ~/.claude/skills/webflow-graph-work
+ln -s ../../.agents/skills/agent-loop ~/.claude/skills/agent-loop
+ln -s ../../.agents/skills/verify-waf ~/.claude/skills/verify-waf
+```
+
+pstack lives in a vendor clone at `~/Projects/vendor/cursor-plugins` for OpenCode and as the `pstack@cursor-plugins` Claude Code plugin.
+
 ## jev
 
 `jev` asks TypeSafe's Jev decision model (System One) through OpenRouter's

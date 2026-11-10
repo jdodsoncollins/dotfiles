@@ -1,0 +1,6 @@
+interface:
+  display_name: "Webflow Graph Work"
+  short_description: "Orchestrate Webflow work with evidence gates"
+  default_prompt: "Use $webflow-graph-work to execute this Webflow task through bounded parallel work, verification, and review."
+policy:
+  allow_implicit_invocation: true
