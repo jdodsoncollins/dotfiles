@@ -5,7 +5,7 @@ description: Drive the customer WAF product in the Webflow monorepo the way a us
 
 # Verify the customer WAF
 
-Status: **draft, page journeys not yet proven live.** Generated 2026-11-10 while HUD was down. Proven so far: `scripts/doctor.sh` fails correctly with HUD down, and the `life.hostname-sync` recipe passed (32/32 on `dev` at `6e775f7cd312`). The first run with HUD up must complete step 4 of `create-verification-skill` (launch, doctor, drive one page feature with `drive.sh`, capture evidence, clean up, confirm the evidence survives) and then replace this line.
+Status: **proven live on 2026-11-10** (`dev` at `9c30ae62fc17`, evidence `tmp/verify-waf/20261110T191319Z-9c30ae62fc17`): doctor passed, `drive.sh security` ran 9/9 journeys with a trace each, every mutation was confirmed by a second `GET …/waf_rules` after reload, cleanup left nothing in the worktree, and the evidence survived. `life.hostname-sync` passed 32/32 the same day. Not yet driven live: `rules.other-types`, `validate.live`, `tokens.disable`, `tokens.limit`, `bypass.mixed`, and every `gate.*` journey (each needs a scratch spec).
 
 `R` below means the Webflow repo root, usually `~/Projects/webflow` or the worktree under test. Run every command from `R`.
 
@@ -53,6 +53,7 @@ Stable handles. Test IDs use `data-automation-id` (`getByTestId`), not `data-tes
 ## Evidence
 
 - Location: `R/tmp/verify-waf/<run-id>/` (Git-ignored). `drive.sh` writes `playwright-report.json`, `line.log`, and `artifacts/` with a trace per test. Open a trace with `npx playwright show-trace <trace.zip>`.
+- Network proof lives inside each `trace.zip`: `*.network` files hold one JSON entry per request (`snapshot.request`, `snapshot.response`), and each response body is the file `resources/<snapshot.response.content._sha1>`. Read the `GET …/waf_rules` bodies after a reload to show the stored value, not just the status code.
 - Proof standards:
   - Exercise the real user path: the Security page, or the dashboard API the page calls.
   - Capture the action and the resulting state, not only the final screen.

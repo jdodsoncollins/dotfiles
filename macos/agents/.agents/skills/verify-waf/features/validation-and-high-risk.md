@@ -24,6 +24,8 @@ Preconditions: baseline scenario. Existing coverage: `waf-rules.spec.ts` (malfor
 
 ## Gotchas
 
+- Server-side proof for the high-risk gate: the first `POST …/waf_rules` for a catch-all rule returns 409, and only the confirmed retry returns 200 (seen in the 2026-11-10 run). A UI-only check that the button is disabled does not prove the gate.
+- In the 2026-11-10 run, saving called `POST …/waf_rules/test` and then `POST …/waf_rules`, and no journey called `POST …/waf_rules/validate`. Live validation (`validate.live`) is unconfirmed until a scratch spec observes the status text and the `/validate` request.
 - The confirmation phrase depends on the number of domains. With the mock there is one domain, so `APPLY TO 1 DOMAIN`.
 - `POST …/waf_rules/validate` checks WAF availability before authorization. A user without permission on a site without WAF gets 404, not 403. `R/entrypoints/server/test/routes/api/waf_test.ts` pins this order. Treat a 404 there as expected behavior, not proof of anything about permissions.
 - Validation is rate limited at 60 per minute per user and site. Fast typing loops in a scratch spec can hit it.

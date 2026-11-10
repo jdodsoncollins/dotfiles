@@ -25,7 +25,7 @@ echo "ok   hud reachable"
 server_verdict="$(printf '%s' "$status_json" | node -e '
   let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
     try {
-      const json = JSON.parse(s.slice(s.indexOf("[")));
+      const json = JSON.parse(s.slice(s.indexOf("[{")));
       const server = json.find((t) => t.taskName === "server") ?? json.find((t) => /^server/i.test(t.taskName));
       if (!server) return console.log("FAIL server task missing");
       const bad = ["errored", "buildError", "down"].includes(server.health);
